@@ -78,7 +78,8 @@ Run **`ProdRelease.bat`** from the repo root on the server for every update (it 
 run unattended, e.g. by a scheduler or a chat-ops bot). It:
 
 1. backs up the database (`pg_dump` into `DB_Backup\`) and the `.env` files,
-2. pulls `main`,
+2. updates the code to exactly `origin/main` (`git fetch` + forced checkout, so local edits
+   to tracked files are overwritten and gitignored files are left alone),
 3. applies database migrations (below),
 4. rebuilds and restarts the stack (`docker compose up -d --build`), passing the git commit
    into both images,
@@ -88,17 +89,17 @@ run unattended, e.g. by a scheduler or a chat-ops bot). It:
 The server is down for a few minutes during a deploy. The batch page then shows an amber
 "No reading for …" until the next reading arrives; no bubbles are lost.
 
-**When a pull changes `ProdRelease.bat` itself**, the script stops with
+**When an update changes `ProdRelease.bat` itself**, the script stops with
 "[STOP] … run ProdRelease.bat again" before rebuilding anything; just run it again. cmd
 reads a running `.bat` line by line from disk, so the script runs from a temporary copy and
-compares it with the pulled file rather than executing a half-replaced script.
+compares it with the updated file rather than executing a half-replaced script.
 
 **DB credentials:** the backup and migration steps use `-U fratoo -d fratoo` (the
 `.env.example` defaults). Change those lines if your `.env` uses other values.
 
 **Running npm on the server:** use `npm ci`, never `npm install`, for anything run directly
-on the host. `npm install` can rewrite `package-lock.json`, which then blocks the next
-`git pull`. The Docker builds use `npm ci` already.
+on the host. `npm install` can rewrite `package-lock.json`; the next deploy would
+silently overwrite it again. The Docker builds use `npm ci` already.
 
 ## Database migrations
 

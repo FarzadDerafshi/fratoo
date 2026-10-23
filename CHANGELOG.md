@@ -36,6 +36,12 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+### Changed
+
+- `ProdRelease.bat` gets the code with `git fetch` + a forced checkout of `origin/main`
+  instead of `git pull`, so a deploy keeps working even if the GitHub history is ever
+  replaced. Gitignored files (`.env`, backups, logs) are untouched as before.
+
 ---
 
 ## [2.6.1] — 2026-10-23 — **Open Source**

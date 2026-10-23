@@ -10,11 +10,11 @@ if %errorlevel% neq 0 (
 )
 
 :: --- Run from a temporary copy of this script. cmd reads a running .bat
-::     line by line from disk, so step 3's git pull replacing this very
+::     line by line from disk, so step 3's update replacing this very
 ::     file mid-run would make it execute garbled lines. The original hands
 ::     over to the copy (no CALL, outside any (...) block, so control never
 ::     comes back to the original) and passes its own folder along. Step 3
-::     then stops if the pull changed this script, so the new version runs
+::     then stops if the update changed this script, so the new version runs
 ::     from its first line on the next attempt. ---
 if /i "%~1"=="--from-copy" goto :running_from_copy
 copy /y "%~f0" "%TEMP%\fratoo_prodrelease.bat" >nul
@@ -30,7 +30,7 @@ set "SELF_COPY=%~f0"
 cd /d "%ROOT%"
 
 :: --- Timestamped log file, saved next to this script. Only the fast
-::     steps (backups, git pull, final container check) are logged here --
+::     steps (backups, git update, final container check) are logged here --
 ::     the Docker build prints live to the console instead so it's obvious
 ::     the script is still alive during that multi-minute step, not frozen. ---
 for /f %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TS=%%T"
@@ -73,7 +73,7 @@ echo fratoo-postgres is not running yet -- nothing to back up ^(first deploy^).
 
 :: Step 2: Back up the root .env (and fratoo-bridge\.env, if you also run
 :: the bridge outside Docker) before touching anything else. Both are
-:: gitignored, so git pull/clean can't touch them, but JWT_SECRET /
+:: gitignored, so the git update can't touch them, but JWT_SECRET /
 :: ADMIN_PASSWORD_HASH / WP_APP_PASSWORD can't be reconstructed if lost,
 :: only regenerated. This costs nothing and removes any doubt.
 echo [2/6] Backing up .env file(s)...
@@ -90,23 +90,35 @@ if exist "%ROOT%fratoo-bridge\.env" (
     echo Backup saved: ConfigBackup\fratoo-bridge-env_%TS%.bak
 )
 
-:: Step 3: Pull the latest code from GitHub.
-echo [3/6] Pulling latest code from Git...
-git pull origin main >> "%LOGFILE%" 2>&1
-set "PULL_RESULT=%errorlevel%"
+:: Step 3: Get the latest code from GitHub. Fetch + forced checkout rather
+:: than git pull: the server never commits, so origin/main is always the
+:: truth, and this keeps working even if the GitHub history is replaced
+:: (a fresh, unrelated history makes git pull refuse to merge). Tracked
+:: files are overwritten; untracked and gitignored ones (.env, DB_Backup\,
+:: ConfigBackup\, logs) are left alone.
+echo [3/6] Getting latest code from Git...
+for /f %%C in ('git rev-parse --short HEAD') do set "OLD_COMMIT=%%C"
+git fetch origin +main:refs/remotes/origin/main >> "%LOGFILE%" 2>&1
+if errorlevel 1 goto :git_failed
+git checkout -f -B main origin/main >> "%LOGFILE%" 2>&1
+if errorlevel 1 goto :git_failed
+for /f %%C in ('git rev-parse --short HEAD') do set "NEW_COMMIT=%%C"
+echo Code: %OLD_COMMIT% -^> %NEW_COMMIT% >> "%LOGFILE%"
 type "%LOGFILE%"
-if %PULL_RESULT% neq 0 (
-    echo [ERROR] Git pull failed! See log: %LOGFILE%
-    pause
-    exit /b %PULL_RESULT%
-)
+goto :git_done
+:git_failed
+type "%LOGFILE%"
+echo [ERROR] Getting the code from Git failed! See log: %LOGFILE%
+pause
+exit /b 1
+:git_done
 fc /b "%SELF_COPY%" "%ROOT%ProdRelease.bat" >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
-    echo [STOP] This pull updated ProdRelease.bat itself. Nothing has been
+    echo [STOP] This update changed ProdRelease.bat itself. Nothing has been
     echo        rebuilt yet -- just run ProdRelease.bat again so the new
     echo        version runs from the start. ^(Backups above are kept.^)
-    echo ProdRelease.bat changed by pull -- stopped for re-run. >> "%LOGFILE%"
+    echo ProdRelease.bat changed by update -- stopped for re-run. >> "%LOGFILE%"
     pause
     exit /b 0
 )
