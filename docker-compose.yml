@@ -1,0 +1,60 @@
+# Standalone Fratoo stack: Postgres + the NestJS backend (fratoo-bridge,
+# which also runs the TCP Blynk listener) + the React frontend (fratoo-web,
+# served by nginx). Replaces the WordPress plugin — see
+# ProjectDocs/ARCHITECTURE.md and ProjectDocs/DECISIONS.md.
+#
+# Copy .env.example to .env in this folder first. Run with:
+#   docker compose up -d --build
+# or just run ProdRelease.bat, which wraps this plus a pre-deploy pg_dump.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fratoo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - fratoo_pgdata:/var/lib/postgresql/data
+      - ./fratoo-bridge/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./fratoo-bridge
+      # Set by ProdRelease.bat (git rev-parse --short HEAD); 'dev' otherwise.
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-dev}
+    container_name: fratoo-bridge
+    restart: unless-stopped
+    ports:
+      - '1234:1234' # Blynk TCP listener — the Airlock connects here directly (see ProjectDocs/ARCHITECTURE.md)
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres # service name on this compose network — overrides whatever .env says for non-Docker use
+      DB_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./fratoo-web
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-dev}
+    container_name: fratoo-web
+    restart: unless-stopped
+    ports:
+      - '8086:80'
+    depends_on:
+      - api
+
+volumes:
+  fratoo_pgdata:

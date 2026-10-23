@@ -1,0 +1,23 @@
+# NestJS
+fratoo-bridge/node_modules/
+fratoo-bridge/dist/
+fratoo-bridge/.env
+
+# React frontend
+fratoo-web/node_modules/
+fratoo-web/dist/
+
+# Repo-root env file (Docker Compose — see .env.example)
+/.env
+
+
+# Deploy script artifacts
+ConfigBackup/
+DB_Backup/
+deploy_log_*.txt
+
+# Claude Code session data
+.claude/
+
+# Real device configs (Wi-Fi passwords, device token) — local only
+ProjectDocs/private/
