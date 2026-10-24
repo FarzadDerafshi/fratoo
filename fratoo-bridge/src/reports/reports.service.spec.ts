@@ -303,4 +303,12 @@ describe('ReportsService', () => {
     expect(html).toMatch(/default 75%, \d+% of the OG from sugar/);
     expect(html).toContain('Measured at the airlock');
   });
+
+  it("puts the device's name in front of the short ID when it has one", () => {
+    const html = service.generateReportHtml({
+      ...makeInput(makeBatch({ deviceId: '0123456789abcdef0123456789abcdef' })),
+      deviceName: 'Airlock <1>',
+    });
+    expect(html).toContain('Airlock &lt;1&gt; (01234567…cdef)');
+  });
 });

@@ -1082,6 +1082,67 @@ input[type='checkbox'] {
 .settings-section-head {
   margin-top: 8px;
 }
+
+/* Settings → Airlocks */
+.airlock-list {
+  display: flex;
+  flex-direction: column;
+  margin: 14px 0 12px;
+}
+.airlock-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.airlock-row:last-child {
+  border-bottom: 1px solid var(--border);
+}
+.airlock-main {
+  min-width: 0;
+}
+.airlock-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-weight: 600;
+}
+.airlock-name .muted {
+  color: var(--muted);
+  font-weight: 500;
+}
+.airlock-token {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.airlock-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.airlock-actions {
+  display: flex;
+  gap: 8px;
+}
+.airlock-edit {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.hint.warn {
+  color: var(--warn);
+}
 .notify-body {
   display: flex;
   flex-direction: column;

@@ -4,7 +4,7 @@ What's open, roughly in priority order. What has shipped is in the
 [CHANGELOG](../CHANGELOG.md); why things are built the way they are is in
 [DECISIONS.md](DECISIONS.md).
 
-## Where things stand (2.6)
+## Where things stand (2.7)
 
 - Standalone stack (NestJS bridge + Postgres + React PWA) in daily use since October 2026;
   the original WordPress plugin is retired.
@@ -13,6 +13,8 @@ What's open, roughly in priority order. What has shipped is in the
 - Push notifications: fermentation started, airlock offline/back online, no start,
   temperature out of range, peak passed, looks finished, possibly stalled, airlock
   restarted; each with a switch and thresholds.
+- Airlocks are discovered from their readings and named in Settings; batches pick one from
+  a list.
 
 ## Alerts
 

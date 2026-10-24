@@ -4,6 +4,7 @@ import { api, downloadReport } from '../api/client';
 import { BatchEventsPanel } from '../components/BatchEventsPanel';
 import { FermentationChart, type ChartMarker } from '../components/FermentationChart';
 import { GravityReadingsPanel } from '../components/GravityReadingsPanel';
+import { DevicePicker } from '../components/DevicePicker';
 import { CheckIcon, MoreIcon, WarningIcon } from '../components/Icons';
 import {
   BUBBLE_SOURCE_LABELS,
@@ -15,12 +16,14 @@ import {
   optionalNumber,
   toDatetimeLocalValue,
 } from '../lib/format';
+import { deviceName } from '../lib/devices';
 import { isLongNote, renderNotesHtml } from '../lib/notes';
 import { ago, dayNumber, formatDateTime, formatShortDateTime, liveKind, span } from '../lib/status';
 import type {
   AbvPoint,
   Batch,
   BatchEvent,
+  Device,
   FermentationEstimate,
   FermentationStats,
   GravityReading,
@@ -351,14 +354,23 @@ export function BatchDetailPage() {
   const [gravity, setGravity] = useState<GravityReading[] | null>(null);
   const [abvSeries, setAbvSeries] = useState<AbvPoint[]>([]);
   const [events, setEvents] = useState<BatchEvent[] | null>(null);
+  /** Known airlocks, for the device name and the edit form's picker; null until loaded (or if it failed). */
+  const [devices, setDevices] = useState<Device[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  const loadDevices = () =>
+    api
+      .get<Device[]>('/devices')
+      .then(setDevices)
+      .catch(() => undefined);
+
   useEffect(() => {
     if (!id) return;
+    void loadDevices();
     void (async () => {
       try {
         const [b, r, ev] = await Promise.all([
@@ -479,6 +491,7 @@ export function BatchDetailPage() {
       });
       setBatch(updated);
       setEditing(false);
+      void loadDevices();
       await reloadModel();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to save changes.');
@@ -621,6 +634,14 @@ export function BatchDetailPage() {
                   Yeast <strong>{batch.yeastStrain}</strong>
                 </span>
               )}
+              {batch.deviceId && (
+                <span>
+                  Airlock{' '}
+                  <strong>
+                    {deviceName(devices?.find((d) => d.deviceId === batch.deviceId) ?? { deviceId: batch.deviceId, name: '' })}
+                  </strong>
+                </span>
+              )}
             </div>
             {batch.notes && !isLongNote(batch.notes) && <RichNotes className="notes" text={batch.notes} />}
           </>
@@ -635,10 +656,13 @@ export function BatchDetailPage() {
               Batch code
               <input name="batchCode" defaultValue={batch.batchCode} required />
             </label>
-            <label className="field">
-              Device ID
-              <input name="deviceId" defaultValue={batch.deviceId} />
-            </label>
+            <DevicePicker
+              key={devices ? 'list' : 'plain'}
+              devices={devices}
+              initial={batch.deviceId}
+              isNew={false}
+              batchId={batch.id}
+            />
             <label className="field">
               Brew type
               <select name="brewType" defaultValue={batch.brewType}>

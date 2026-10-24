@@ -84,6 +84,14 @@ fratoo/
   uses the report's lag-phase rule (`sustainedStartIndex()`), confirmed by two follow-up
   readings. The service worker
   (`fratoo-web/public/sw.js`) shows the notification and opens the batch on tap.
+- **DevicesModule** (2.7.0) — `src/devices/`. The known airlocks (`devices` table: token,
+  name). `DevicesService` adds a token the first time it sends a reading
+  (`ReadingsService.onInserted()`, with an in-memory set so known tokens cost no query);
+  `GET /api/devices` lists them with the newest reading, the active batch and the newest
+  batch start (the new-batch form preselects from that); `POST`, `PATCH /:deviceId`
+  (name) and `DELETE /:deviceId` manage the list. Batches and readings still refer to the
+  token itself, so the list never affects which readings belong to a batch. The report
+  shows the device's name next to the short token.
 - **BatchesModule** — batch CRUD, cascading delete with the next-batch guard, and window
   resolution (`resolveWindow()`). Batches and readings have no foreign key: "this batch's
   readings" is always `device_id` + the window `started_at .. (ended_at ?? now)`, clamped to

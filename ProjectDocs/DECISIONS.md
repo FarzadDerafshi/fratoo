@@ -5,6 +5,25 @@ Lightweight decision log — why things are built the way they are, not what the
 
 ---
 
+## 2026-10-24 — Airlocks are discovered from their readings, named in a separate table (2.7.0)
+
+Starting a batch meant pasting the airlock's 32-character Blynk token. Now a `devices` table
+holds one row per token with a name; a token is added the first time it sends a reading, and
+the batch form picks from that list.
+
+**Why discovered, not entered:** the bridge already sees every token, so there's nothing to
+type even once, and an airlock re-provisioned with a new token simply shows up. It's added
+on its first *stored reading* rather than on login, so a stray connection that never sends
+data doesn't create an entry. **Why a table, not a JSON setting:** it keys cleanly by token,
+and the first deploy can backfill it in SQL from existing readings and batches. That
+backfill runs only when the migration creates the table, so a removed airlock doesn't come
+back with every deploy. **Why batches keep the raw token** (no foreign key to `devices`):
+the window logic (`resolveWindow()`) and every existing batch already use it, and renaming
+or removing an airlock must never change which readings belong to a batch. **Preselection:**
+the airlock of the newest batch, because consecutive batches almost always use the same
+airlock. The form warns when that airlock still has an active batch rather than blocking,
+since the next-batch guard already ends the old batch's window where the new one starts.
+
 ## 2026-10-23 — WordPress cutover by removing the dual-write code (2.5.0)
 
 The plan was to unset `WP_API_URL` and restart `api` (reversible without a code change).

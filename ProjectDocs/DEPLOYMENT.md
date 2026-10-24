@@ -56,9 +56,10 @@ the stack itself is plain Docker and runs anywhere Docker does.
 5. **Point the airlock at the server** (user manual, device provisioning), wait one wake
    cycle (~5 min), and look for `Auth from … token: …` and `Pin V100 = …` lines in
    `docker compose logs -f api`.
-6. Open `http://<server>:8086`, sign in, and create a batch with the airlock's device ID:
-   the 32-character Blynk token the device was provisioned with (`blynk=` in its config
-   URL; the bridge log shows its first 8 characters on each connect).
+6. Open `http://<server>:8086` and sign in. The airlock shows up in **Settings → Airlocks**
+   after its first reading; give it a name, then create a batch and pick it from the list.
+   (Its token is the `blynk=` value from its config URL; the bridge log shows the first 8
+   characters on each connect.)
 
 ## HTTPS and remote access
 

@@ -135,11 +135,31 @@ window (`started_at` → `ended_at`, or "still running" if `ended_at` is empty).
 
 ### Starting a batch
 
-Create a new batch entry with a `device_id`, brew type, volume, and optional notes — and,
+Create a new batch entry with its **airlock** (picked from a list, see below), brew type,
+volume, and optional notes — and,
 if you know them, the yeast strain, its attenuation (from the yeast pack), when you pitched
 and the wort temperature at that moment (all can be filled in later too). From
 that point on, any readings coming in from that device are considered part of this batch
 until it's completed (or another batch starts on the same device).
+
+The **Airlock** list shows every known airlock with its name, whether it's online and which
+batch is using it. The airlock of your most recent batch is preselected, so with one
+airlock there's nothing to choose. If it still has an active batch, the form says so: the
+old batch's readings stop where the new one starts, so end it first if it's finished.
+**Enter a token…** at the bottom takes a raw token for an airlock that isn't listed.
+
+### Airlocks (Settings → Airlocks)
+
+Every airlock that has sent a reading appears here by itself (existing ones were added from
+past readings when 2.7 was installed). For each: its name and short token, online / last
+seen, and the batch using it.
+
+- **Name it / Edit** — give it a name ("Airlock 1", "Big fermenter"); batch pages and
+  reports then show the name. The edit view also shows the full token.
+- **Copy token** — the full 32-character token, e.g. for re-provisioning the airlock.
+- **+ Add an airlock by token** — list one before it has ever connected.
+- **Remove…** (in Edit) — takes it off the list only; readings and batches are kept. One
+  that's still sending comes back by itself, unnamed, with its next reading.
 
 ### Completing a batch
 
@@ -148,7 +168,7 @@ batch's reading window.
 
 ### Editing a batch
 
-Open the **⋯** menu on the batch detail page → **Edit batch & ABV inputs** to change batch code, device ID, brew type, started
+Open the **⋯** menu on the batch detail page → **Edit batch & ABV inputs** to change batch code, airlock, brew type, started
 date, volume, added sugar, notes, the **Yeast & pitch** details, hops, the **Bottling**
 details (priming sugar, bottled volume, number of bottles) and tasting notes. Clearing a
 field removes that value

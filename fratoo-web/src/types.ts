@@ -189,3 +189,14 @@ export interface NotificationSettings {
   stallHours: number;
   stallPctOfExpected: number;
 }
+
+/** A known airlock (Settings → Airlocks): GET /api/devices. */
+export interface Device {
+  deviceId: string;
+  /** '' = not named yet. */
+  name: string;
+  createdAt: string;
+  lastReadingAt: string | null;
+  activeBatch: { id: number; batchCode: string } | null;
+  lastBatchStartedAt: string | null;
+}

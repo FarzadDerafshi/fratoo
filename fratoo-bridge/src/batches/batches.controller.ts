@@ -19,6 +19,7 @@ import { ReadingsService } from '../readings/readings.service';
 import { ReportsService } from '../reports/reports.service';
 import { FermentationService } from '../fermentation/fermentation.service';
 import { VERSION_INFO } from '../app.service';
+import { DevicesService } from '../devices/devices.service';
 import { BatchesService } from './batches.service';
 import { CreateBatchDto } from './dto/create-batch.dto';
 import { UpdateBatchDto } from './dto/update-batch.dto';
@@ -31,6 +32,7 @@ export class BatchesController {
     private readonly batches: BatchesService,
     private readonly reports: ReportsService,
     private readonly fermentation: FermentationService,
+    private readonly devices: DevicesService,
   ) {}
 
   @Get()
@@ -157,6 +159,7 @@ export class BatchesController {
       abvSeries: await this.fermentation.abvSeries(batch, readings),
       abvAt: await this.fermentation.abvTimeline(batch, readings),
       version: `v${VERSION_INFO.version} (${VERSION_INFO.commit})`,
+      deviceName: await this.devices.nameOf(batch.deviceId),
     });
     const filename = this.reports.reportFilename(batch);
 

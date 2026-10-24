@@ -9,6 +9,7 @@ import { BatchesModule } from './batches/batches.module';
 import { ReportsModule } from './reports/reports.module';
 import { AuthModule } from './auth/auth.module';
 import { PushModule } from './push/push.module';
+import { DevicesModule } from './devices/devices.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PushModule } from './push/push.module';
     BatchesModule,
     AuthModule,
     PushModule,
+    DevicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

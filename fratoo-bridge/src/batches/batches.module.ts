@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ReadingsModule } from '../readings/readings.module';
 import { ReportsModule } from '../reports/reports.module';
+import { DevicesModule } from '../devices/devices.module';
 import { BatchesController } from './batches.controller';
 import { BatchesService } from './batches.service';
 import { FermentationController } from '../fermentation/fermentation.controller';
@@ -15,7 +16,7 @@ import { FermentationService } from '../fermentation/fermentation.service';
 // (stats, recalibrate-on-edit, report ABV) — one module avoids a circular
 // module import.
 @Module({
-  imports: [ReadingsModule, ReportsModule],
+  imports: [ReadingsModule, ReportsModule, DevicesModule],
   controllers: [BatchesController, FermentationController],
   providers: [BatchesService, FermentationService],
   exports: [BatchesService, FermentationService],

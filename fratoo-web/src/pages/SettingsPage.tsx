@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { AirlocksCard } from '../components/AirlocksCard';
 import { NotificationsCard } from '../components/NotificationsCard';
 import type { FermentationSettings } from '../types';
 
@@ -242,6 +243,8 @@ export function SettingsPage() {
         </Link>
         <h1 className="page-title">Settings</h1>
       </div>
+
+      <AirlocksCard />
 
       <NotificationsCard />
 

@@ -36,6 +36,18 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+### Added
+
+- **Airlocks** (Settings → Airlocks): every airlock that sends a reading is listed by
+  itself, with online / last seen and the batch using it. Name it, copy its full token, add
+  one by token before it has connected, or remove it from the list (readings and batches
+  are kept). Existing airlocks are added from past readings on the first deploy.
+- The new-batch and edit forms pick the airlock from a dropdown instead of a pasted token,
+  preselecting the airlock of the most recent batch; **Enter a token…** still takes a raw
+  token. The form warns when the chosen airlock still has an active batch.
+- Batch page and report show the airlock's name.
+- Migration `006_devices.sql` (applied by `ProdRelease.bat`).
+
 ### Changed
 
 - `ProdRelease.bat` gets the code with `git fetch` + a forced checkout of `origin/main`

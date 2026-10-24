@@ -42,6 +42,8 @@ export interface ReportInput {
   abvAt: (t: Date) => number | null;
   /** Product version + commit, printed in the footnote. */
   version: string;
+  /** The device's name from Settings → Devices, if it has one. */
+  deviceName?: string | null;
 }
 
 interface DailySnapshot {
@@ -450,7 +452,7 @@ export class ReportsService {
       batch.targetAbv !== null
         ? metaItem('Target ABV', formatPercent(batch.targetAbv, 1))
         : '',
-      batch.deviceId ? metaItem('Device', shortDeviceId(batch.deviceId)) : '',
+      batch.deviceId ? metaItem('Device', deviceLabel(batch.deviceId, input.deviceName)) : '',
     ].join('');
 
     // --- ABV card ---------------------------------------------------------
@@ -1150,6 +1152,11 @@ const TEMP_CAVEAT =
 /** "01234567…cdef": the full 32-character Blynk token is noise on a report. */
 function shortDeviceId(id: string): string {
   return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+}
+
+/** "Airlock 1 (01234567…cdef)" when the device has a name, else just the short token. */
+function deviceLabel(id: string, name: string | null | undefined): string {
+  return name ? `${name} (${shortDeviceId(id)})` : shortDeviceId(id);
 }
 
 function dayOf(startedAt: Date, t: Date): number {

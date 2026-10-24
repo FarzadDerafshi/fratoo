@@ -8,6 +8,7 @@ import { AppSettingEntity } from './entities/app-setting.entity';
 import { BatchEventEntity } from './entities/batch-event.entity';
 import { PushSubscriptionEntity } from './entities/push-subscription.entity';
 import { BatchNotificationEntity } from './entities/batch-notification.entity';
+import { DeviceEntity } from './entities/device.entity';
 
 // Token for the shared TypeORM DataSource (see DATA_SOURCE usage in
 // ReadingsService / BatchesService).
@@ -49,6 +50,7 @@ export const DATA_SOURCE = 'DATA_SOURCE';
             BatchEventEntity,
             PushSubscriptionEntity,
             BatchNotificationEntity,
+            DeviceEntity,
           ],
           // Schema changes go through db/init/*.sql, not TypeORM migrations
           // — see db/init/001_init_fratoo.sql and ProjectDocs/DEPLOYMENT.md.

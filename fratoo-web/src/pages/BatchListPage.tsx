@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatPercent, formatSg, optionalDateTime, optionalNumber } from '../lib/format';
 import { ago, dayNumber, liveKind } from '../lib/status';
-import type { Batch, FermentationStats } from '../types';
+import { DevicePicker } from '../components/DevicePicker';
+import type { Batch, Device, FermentationStats } from '../types';
 
 type Filter = 'All' | 'Active' | 'Completed';
 
@@ -78,6 +79,7 @@ export function BatchListPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<Filter>('All');
+  const [devices, setDevices] = useState<Device[] | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -96,6 +98,17 @@ export function BatchListPage() {
       }
     })();
   }, []);
+
+  /** Toggles the form; the airlock list is fetched fresh each time it opens (online status, active batches). */
+  function openCreate() {
+    if (showCreate) return setShowCreate(false);
+    setShowCreate(true);
+    setDevices(null);
+    api
+      .get<Device[]>('/devices')
+      .then(setDevices)
+      .catch(() => setDevices(null));
+  }
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -140,7 +153,7 @@ export function BatchListPage() {
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => setShowCreate((v) => !v)}>
+          <button type="button" onClick={() => openCreate()}>
             {showCreate ? 'Cancel' : '+ New batch'}
           </button>
         </div>
@@ -154,10 +167,8 @@ export function BatchListPage() {
               Batch code
               <input name="batchCode" placeholder="e.g. IPA 2026.11" required />
             </label>
-            <label className="field">
-              Device ID
-              <input name="deviceId" placeholder="Blynk token" />
-            </label>
+            {/* Remounts once the list arrives, so the likeliest airlock gets preselected. */}
+            <DevicePicker key={devices ? 'list' : 'plain'} devices={devices} initial="" isNew />
             <label className="field">
               Brew type
               <select name="brewType" defaultValue="beer">

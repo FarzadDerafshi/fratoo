@@ -33,6 +33,9 @@ printable batch reports and push alerts.
 - **Push notifications** — fermentation started, airlock offline / back online, no start,
   temperature out of range, peak passed, looks finished, possibly stalled, airlock
   restarted; each with an on/off switch and thresholds.
+- **Airlocks found automatically** — every airlock that sends a reading is listed in
+  Settings; name it once and new batches pick it from a dropdown instead of a 32-character
+  token.
 - **Single-admin login**, Docker Compose deployment, a one-command deploy script with
   backups and automatic migrations.
 
@@ -67,8 +70,8 @@ docker compose up -d --build
 ```
 
 Open `http://localhost:8086` and sign in. To try it without hardware, run the mock device
-(`node mock-device.js`), then create a batch with device ID
-`aaaabbbbccccddddeeeeffffaaaabbbb`.
+(`node mock-device.js`): it appears under Settings → Airlocks after its first reading, and a
+new batch picks it from the list.
 
 For a real airlock, point it at the server's LAN IP and port 1234 (see
 [device provisioning](ProjectDocs/USER-MANUAL.md#reconnecting-the-plaato-airlock-to-wi-fi-device-provisioning)).
