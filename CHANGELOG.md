@@ -36,6 +36,10 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+---
+
+## [2.7.0] — 2026-10-24 — **Airlocks**
+
 ### Added
 
 - **Airlocks** (Settings → Airlocks): every airlock that sends a reading is listed by
