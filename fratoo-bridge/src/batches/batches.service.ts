@@ -238,7 +238,8 @@ export class BatchesService {
   }
 
   // --- Events (dry hop, bottling, disturbances …) ---------------------------
-  // Annotations only — they never feed the ABV model, so no recalibration.
+  // Annotations, except that an airlock change starts a new bubble-volume
+  // segment: BatchesController recalibrates after every event write.
 
   async listEvents(batchId: number): Promise<BatchEventEntity[]> {
     await this.findOneOrThrow(batchId);

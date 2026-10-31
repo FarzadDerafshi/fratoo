@@ -88,6 +88,7 @@ const EVENT_LABELS: Record<BatchEventKind, string> = {
   addition: 'Addition',
   temperature: 'Temperature change',
   disturbance: 'Disturbance',
+  airlock: 'Airlock changed',
   bottling: 'Bottling',
   other: 'Note',
 };
@@ -502,7 +503,9 @@ export class ReportsService {
       miniStat(
         'Bubble volume',
         `${formatNumber(estimate.bubbleVolumeMl, 3)} mL`,
-        BUBBLE_SOURCE_LABELS[estimate.bubbleVolumeSource],
+        estimate.airlockSegments.length > 1
+          ? `since the airlock change · ${BUBBLE_SOURCE_LABELS[estimate.bubbleVolumeSource]}`
+          : BUBBLE_SOURCE_LABELS[estimate.bubbleVolumeSource],
       ),
     ].join('');
 
@@ -972,7 +975,7 @@ export class ReportsService {
 
 	<p class="footnote">
 		Generated ${escapeHtml(generated)} UTC by Fratoo ${escapeHtml(input.version)} from ${formatNumber(input.readings.length, 0)} telemetry rows. All times UTC.
-		ABV from airlock bubbles × ${formatNumber(estimate.bubbleVolumeMl, 3)} mL/bubble (${escapeHtml(BUBBLE_SOURCE_LABELS[estimate.bubbleVolumeSource])}),
+		ABV from airlock bubbles × ${escapeHtml(bubbleVolumeFootnote(estimate))},
 		gas volume at the measured temperature and ${formatNumber(s.pressureKpa, 1)} kPa${s.dissolvedCo2Enabled ? ', plus dissolved CO₂' : ''};
 		${s.abvFormula === 'alternate' ? 'alternate (Hall)' : 'standard'} ABV formula; refractometer readings corrected with WCF ${formatNumber(s.wortCorrectionFactor, 2)} (Terrill for fermenting wort).
 		Temperature calibrated via PLAATO's PCB self-heating correction (0.9133 × raw − 1.145).
@@ -1102,6 +1105,16 @@ const LOGO_SVG = `<svg width="34" height="32" viewBox="0 0 106 100" aria-hidden=
 </g>
 <circle cx="79" cy="48" r="5.5" fill="#111d3b"/><circle cx="97" cy="69.5" r="6" fill="#111d3b"/>
 </svg>`;
+
+/** "0.280 mL/bubble (this batch's readings)", or one clause per airlock segment. */
+function bubbleVolumeFootnote(estimate: BatchEstimate): string {
+  const one = (ml: number, source: BubbleVolumeSource) => `${formatNumber(ml, 3)} mL/bubble (${BUBBLE_SOURCE_LABELS[source]})`;
+  if (estimate.airlockSegments.length <= 1) return one(estimate.bubbleVolumeMl, estimate.bubbleVolumeSource);
+  const parts = estimate.airlockSegments.map((seg) =>
+    seg.startsAt === null ? one(seg.bubbleVolumeMl, seg.source) : `from ${formatTimestamp(seg.startsAt)} ${one(seg.bubbleVolumeMl, seg.source)}`,
+  );
+  return `${parts.join(', then ')}; bubble rates are shown in bubbles of the current size`;
+}
 
 /** Same wording as the dashboard's ABV badge (BatchDetailPage.tsx). */
 function calibrationBadge(estimate: BatchEstimate): {

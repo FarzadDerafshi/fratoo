@@ -44,6 +44,22 @@ are kept as the project's record.
   start from. Until now the only choice was excluding the readings, which also took them
   away from the batch itself.
 - Migration `007_calibration_sharing.sql` (applied by `ProdRelease.bat`).
+- **Airlock changed** event. Log it when the airlock is refilled to a different water level
+  or swapped: the bubble size changes with the water level, so the ABV model now fits a
+  separate bubble volume before and after each change, each from the gravity readings taken
+  in it (a stretch without a reading of its own uses the learned or default volume, with a
+  warning). On the Oct 2026 IPA, whose airlock was lowered on day 3, both refractometer
+  readings now match exactly (2.106 → 0.141 mL/bubble) instead of 0.8% vs 3.0% and 4.5% vs
+  4.2%.
+- After an airlock change, bubble rates everywhere (chart, "now", peak, batch list, report,
+  alerts) are shown in bubbles of the current size, so a smaller bubble no longer fakes a
+  peak or a restart. The raw bubble count is unchanged.
+
+### Changed
+
+- A batch with airlock changes caches and shares the bubble volume of its latest calibrated
+  stretch (the airlock as it was left), weighted by that stretch's readings.
+- Adding, editing or removing an event recalibrates the batch.
 
 ---
 

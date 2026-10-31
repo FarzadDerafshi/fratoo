@@ -189,7 +189,10 @@ function AbvCard({ batch, estimate }: { batch: Batch; estimate: FermentationEsti
         <div className="mini-stat">
           <div className="mini-label">Bubble volume</div>
           <div className="mini-value">{estimate.bubbleVolumeMl.toFixed(3)} mL</div>
-          <div className="mini-sub">{BUBBLE_SOURCE_LABELS[estimate.bubbleVolumeSource]}</div>
+          <div className="mini-sub">
+            {estimate.airlockSegments.length > 1 && 'since the airlock change · '}
+            {BUBBLE_SOURCE_LABELS[estimate.bubbleVolumeSource]}
+          </div>
         </div>
       </div>
       <p className="hint">
@@ -231,6 +234,9 @@ function SideCard({ batch, stats }: { batch: Batch; stats: FermentationStats }) 
           <span>Total bubbles</span>
           <strong>{stats.totalBubbles > 0 ? stats.totalBubbles.toLocaleString() : '—'}</strong>
         </div>
+        {stats.airlockSegments.length > 1 && (
+          <p className="hint">Rates are in bubbles of the current airlock size, so they compare across the airlock change.</p>
+        )}
       </div>
       <div className="divider" />
       <div className="side-group">
@@ -888,7 +894,12 @@ export function BatchDetailPage() {
           </p>
         </section>
       ) : (
-        <FermentationChart readings={readings} abvSeries={abvSeries} markers={markers} />
+        <FermentationChart
+          readings={readings}
+          abvSeries={abvSeries}
+          markers={markers}
+          ratesRescaled={(stats?.airlockSegments.length ?? 0) > 1}
+        />
       )}
 
       <GravityReadingsPanel

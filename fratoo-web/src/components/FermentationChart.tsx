@@ -126,9 +126,11 @@ interface Props {
   readings: Reading[];
   abvSeries: AbvPoint[];
   markers: ChartMarker[];
+  /** The airlock was changed: rates are in bubbles of the current size (FermentationService.withComparableRates()). */
+  ratesRescaled?: boolean;
 }
 
-export function FermentationChart({ readings, abvSeries, markers }: Props) {
+export function FermentationChart({ readings, abvSeries, markers, ratesRescaled = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [rangeHours, setRangeHours] = useState<number | null>(null);
   const [show, setShow] = useState({ rate: true, temp: true, abv: false });
@@ -332,7 +334,7 @@ export function FermentationChart({ readings, abvSeries, markers }: Props) {
         <canvas ref={canvasRef} role="img" aria-label="Bubble rate and temperature over the batch" />
       </div>
       <div className="chart-legend">
-        <span>Left axis: bubbles per minute</span>
+        <span>Left axis: bubbles per minute{ratesRescaled ? ', in bubbles of the current airlock size' : ''}</span>
         <span>Right axis: °C{show.abv && data.hasAbv ? ' and ABV %' : ''}</span>
         {data.gaps.length > 0 && <span>Shaded: no readings received (bubbles were still counted)</span>}
         {markers.some((m) => m.kind !== 'event') && <span>Dashed line: gravity reading</span>}

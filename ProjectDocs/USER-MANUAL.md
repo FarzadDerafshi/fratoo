@@ -191,7 +191,15 @@ card, on the page and in the report.
 The **Events** panel on the batch page logs things that happened at a moment: dry hop,
 addition, temperature change, disturbance (moving the fermenter, opening the lid), bottling,
 or a plain note. Each shows as a solid amber line on the chart and in the report, so a bump
-in the bubble rate has an explanation. Events never change the ABV estimate.
+in the bubble rate has an explanation. These never change the ABV estimate.
+
+**Airlock changed** is the exception. Log it when you refill the airlock to a different
+water level or swap it. Deeper water makes bigger bubbles, so the ABV model then calibrates
+the bubble size before and after the change separately; take a gravity reading after the
+change so the new size can be learned (until then it uses the learned or default size, and
+the batch shows a warning). Bubble rates on the chart, in the Activity card and in alerts are
+then shown in bubbles of the current size, so the change doesn't look like a peak or a
+stall. Best of all: fill the airlock to the same marked level every time.
 
 ### Reopening a completed batch
 

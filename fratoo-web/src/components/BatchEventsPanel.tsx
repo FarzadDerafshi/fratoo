@@ -111,6 +111,11 @@ export function BatchEventsPanel({ batchId, batchStartedAt, events, onChanged }:
             Notes
             <input name="notes" defaultValue={editing?.notes ?? ''} placeholder="e.g. Cascade 50 g, moved to the cellar" />
           </label>
+          <p className="hint span-all">
+            Log <strong>Airlock changed</strong> when you refill the airlock to a different water level or swap it: the
+            bubble size changes, so the ABV model calibrates before and after separately. Take a gravity reading
+            afterwards so the new size can be learned.
+          </p>
           <div className="form-actions">
             <button type="submit" disabled={busy}>
               {editing ? 'Save event' : 'Log event'}

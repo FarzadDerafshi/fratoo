@@ -88,9 +88,11 @@ export class BatchesController {
     return { count: await this.batches.countReadings(id) };
   }
 
+  /** Bubble rates in bubbles of the current airlock size (FermentationService.withComparableRates()). */
   @Get(':id/readings')
-  getReadings(@Param('id', ParseIntPipe) id: number) {
-    return this.batches.getReadings(id);
+  async getReadings(@Param('id', ParseIntPipe) id: number) {
+    const batch = await this.batches.findOneOrThrow(id);
+    return this.fermentation.withComparableRates(batch, await this.batches.getReadings(id));
   }
 
   @Get(':id/events')
@@ -98,24 +100,31 @@ export class BatchesController {
     return this.batches.listEvents(id);
   }
 
+  // Airlock-changed events split the calibration into segments, so every
+  // event write recalibrates (cheap, and an event can change kind).
   @Post(':id/events')
-  addEvent(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateBatchEventDto) {
-    return this.batches.addEvent(id, dto);
+  async addEvent(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateBatchEventDto) {
+    const event = await this.batches.addEvent(id, dto);
+    await this.fermentation.recalibrate(id);
+    return event;
   }
 
   @Patch(':id/events/:eventId')
-  updateEvent(
+  async updateEvent(
     @Param('id', ParseIntPipe) id: number,
     @Param('eventId', ParseIntPipe) eventId: number,
     @Body() dto: UpdateBatchEventDto,
   ) {
-    return this.batches.updateEvent(id, eventId, dto);
+    const event = await this.batches.updateEvent(id, eventId, dto);
+    await this.fermentation.recalibrate(id);
+    return event;
   }
 
   @Delete(':id/events/:eventId')
   @HttpCode(204)
-  removeEvent(@Param('id', ParseIntPipe) id: number, @Param('eventId', ParseIntPipe) eventId: number) {
-    return this.batches.removeEvent(id, eventId);
+  async removeEvent(@Param('id', ParseIntPipe) id: number, @Param('eventId', ParseIntPipe) eventId: number) {
+    await this.batches.removeEvent(id, eventId);
+    await this.fermentation.recalibrate(id);
   }
 
   @Get(':id/stats')
@@ -124,7 +133,7 @@ export class BatchesController {
     const readings = await this.batches.getReadings(id);
     const estimate = await this.fermentation.estimate(batch, readings);
     return {
-      ...ReadingsService.computeStats(readings),
+      ...ReadingsService.computeStats(await this.fermentation.withComparableRates(batch, readings, estimate)),
       // From the calibrated ABV model — GET :id/fermentation has the full detail.
       co2Liters: estimate.co2Liters,
       abv: estimate.abv,
@@ -136,6 +145,7 @@ export class BatchesController {
       targetAbv: estimate.targetAbv,
       bubbleVolumeMl: estimate.bubbleVolumeMl,
       bubbleVolumeSource: estimate.bubbleVolumeSource,
+      airlockSegments: estimate.airlockSegments,
     };
   }
 
@@ -145,15 +155,17 @@ export class BatchesController {
     @Res() res: Response,
   ) {
     const batch = await this.batches.findOneOrThrow(id);
-    const readings = await this.batches.getReadings(id);
     if (!batch) throw new NotFoundException();
+    const estimate = await this.fermentation.estimate(batch, await this.batches.getReadings(id));
+    // Rates in bubbles of the current airlock size, like the dashboard; counters (and so ABV) are unchanged.
+    const readings = await this.fermentation.withComparableRates(batch, await this.batches.getReadings(id), estimate);
 
     // Same sources as the dashboard's batch page (stats, fermentation, gravity-readings, abv-series).
     const html = this.reports.generateReportHtml({
       batch,
       readings,
       stats: ReadingsService.computeStats(readings),
-      estimate: await this.fermentation.estimate(batch, readings),
+      estimate,
       gravity: await this.fermentation.listGravityReadings(id),
       events: await this.batches.listEvents(id),
       abvSeries: await this.fermentation.abvSeries(batch, readings),

@@ -20,7 +20,9 @@ import {
   gasMolarVolumeL,
   gravityReadingToSg,
   learnBubbleVolume,
+  rateScaleAt,
   resolveBubbleVolume,
+  segmentAt,
   sgToBrix,
   terrillCubicFg,
 } from './abv-model';
@@ -244,14 +246,155 @@ describe('calibration', () => {
   });
 });
 
+describe('airlock segments', () => {
+  // The same synthetic batch, but the airlock water was lowered at hour 60:
+  // big bubbles before, small ones after. Readings come from the forward
+  // model with both volumes, so calibrate() must recover each of them.
+  const BEFORE_ML = 2.1;
+  const AFTER_ML = 0.13;
+  const change = [hour(60)];
+  const rows = telemetry(240, (h) =>
+    h < 12 ? 0 : (h <= 60 ? 300 : 4800) * Math.exp(-(h - 12) / 80),
+  );
+  const series = buildGasSeries(rows, settings, change);
+  const truth = [BEFORE_ML, AFTER_ML];
+  const readingAt = (h: number): GravityInput => ({
+    id: h,
+    measuredAt: hour(h),
+    value: estimateAt(
+      gasAt(series, hour(h), settings),
+      truth,
+      batch(),
+      settings,
+    ).estimatedSg!,
+    unit: 'sg',
+  });
+
+  it('splits the gas by segment and still totals it', () => {
+    const last = series.at(-1)!;
+    expect(last.segment).toBe(1);
+    expect(last.segmentBubbles[0] + last.segmentBubbles[1]).toBe(
+      last.cumulativeBubbles,
+    );
+    expect(last.segmentMolesPerMl[0] + last.segmentMolesPerMl[1]).toBeCloseTo(
+      last.molesPerMl,
+      12,
+    );
+    expect(segmentAt(change, hour(59))).toBe(0);
+    expect(segmentAt(change, hour(60))).toBe(1);
+  });
+
+  it('recovers both bubble volumes from one reading in each segment', () => {
+    const fit = calibrate(
+      batch(),
+      [readingAt(48), readingAt(200)],
+      series,
+      settings,
+      0.3,
+      change,
+    );
+    expect(fit.segments!.map((seg) => seg.fittedBubbleVolumeMl)).toEqual([
+      expect.closeTo(BEFORE_ML, 6),
+      expect.closeTo(AFTER_ML, 6),
+    ]);
+    expect(fit.points.map((p) => p.impliedBubbleVolumeMl)).toEqual([
+      expect.closeTo(BEFORE_ML, 6),
+      expect.closeTo(AFTER_ML, 6),
+    ]);
+    // The airlock as it was left is what the batch shares.
+    expect(fit.fittedBubbleVolumeMl).toBeCloseTo(AFTER_ML, 6);
+    expect(fit.fittedPoints).toBe(1);
+  });
+
+  it('a single volume across the change misfits the early reading badly', () => {
+    const one = calibrate(
+      batch(),
+      [readingAt(48), readingAt(200)],
+      series,
+      settings,
+    );
+    const [early] = estimateBatch(
+      batch(),
+      rows,
+      [readingAt(48), readingAt(200)],
+      null,
+      settings,
+    ).calibration.points;
+    expect(one.fittedBubbleVolumeMl).not.toBeCloseTo(AFTER_ML, 2);
+    // Least squares follows the late, larger-signal reading, so the early one under-reads by a third or more (as on the real batch).
+    expect(early.predictedAbv! / early.measuredAbv!).toBeLessThan(0.7);
+  });
+
+  it('with segments, the estimate matches every reading', () => {
+    const est = estimateBatch(
+      batch(),
+      rows,
+      [readingAt(48), readingAt(200)],
+      null,
+      settings,
+      change,
+    );
+    for (const p of est.calibration.points)
+      expect(p.predictedAbv).toBeCloseTo(p.measuredAbv!, 6);
+    expect(est.bubbleVolumeMl).toBeCloseTo(AFTER_ML, 6);
+    expect(est.airlockSegments.map((seg) => seg.source)).toEqual([
+      'batch-calibration',
+      'batch-calibration',
+    ]);
+    expect(est.warnings.join(' ')).not.toMatch(/airlock change/);
+  });
+
+  it('a segment without a reading of its own uses the learned volume, and warns', () => {
+    const est = estimateBatch(
+      batch(),
+      rows,
+      [readingAt(48)],
+      0.28,
+      settings,
+      change,
+    );
+    expect(
+      est.airlockSegments.map((seg) => [seg.bubbleVolumeMl, seg.source]),
+    ).toEqual([
+      [expect.closeTo(BEFORE_ML, 6), 'batch-calibration'],
+      [0.28, 'learned'],
+    ]);
+    expect(est.calibration.fittedBubbleVolumeMl).toBeCloseTo(BEFORE_ML, 6);
+    expect(est.warnings.join(' ')).toMatch(/since the last airlock change/);
+  });
+
+  it('a reading taken right at the change, before any new bubbles, cannot calibrate the new segment', () => {
+    const fit = calibrate(
+      batch(),
+      [{ ...readingAt(48), measuredAt: hour(60) }],
+      series,
+      settings,
+      0.3,
+      change,
+    );
+    expect(fit.points[0].reason).toBe(
+      'No bubbles counted since the airlock change',
+    );
+  });
+
+  it('puts every rate into bubbles of the current size', () => {
+    expect(rateScaleAt(truth, change, hour(10))).toBeCloseTo(
+      BEFORE_ML / AFTER_ML,
+      9,
+    );
+    expect(rateScaleAt(truth, change, hour(100))).toBe(1);
+    expect(rateScaleAt([0.3], [], hour(10))).toBe(1);
+  });
+});
+
 describe('bubble volume resolution', () => {
   const fit = (ml: number | null) => ({ points: [], fittedBubbleVolumeMl: ml, usablePoints: ml ? 1 : 0 });
 
   it('override → own fit → learned → default', () => {
-    expect(resolveBubbleVolume(batch({ bubbleVolumeMl: 0.5 }), fit(0.4), 0.3, settings)).toEqual({ bubbleVolumeMl: 0.5, source: 'batch-override' });
-    expect(resolveBubbleVolume(batch(), fit(0.4), 0.3, settings)).toEqual({ bubbleVolumeMl: 0.4, source: 'batch-calibration' });
-    expect(resolveBubbleVolume(batch(), fit(null), 0.33, settings)).toEqual({ bubbleVolumeMl: 0.33, source: 'learned' });
-    expect(resolveBubbleVolume(batch(), fit(null), null, settings)).toEqual({ bubbleVolumeMl: 0.3, source: 'default' });
+    expect(resolveBubbleVolume(batch({ bubbleVolumeMl: 0.5 }), fit(0.4), 0.3, settings)).toMatchObject({ bubbleVolumeMl: 0.5, source: 'batch-override' });
+    expect(resolveBubbleVolume(batch(), fit(0.4), 0.3, settings)).toMatchObject({ bubbleVolumeMl: 0.4, source: 'batch-calibration' });
+    expect(resolveBubbleVolume(batch(), fit(null), 0.33, settings)).toMatchObject({ bubbleVolumeMl: 0.33, source: 'learned' });
+    expect(resolveBubbleVolume(batch(), fit(null), null, settings)).toMatchObject({ bubbleVolumeMl: 0.3, source: 'default' });
   });
 
   it("'default-only' mode ignores calibration but still honours an override", () => {

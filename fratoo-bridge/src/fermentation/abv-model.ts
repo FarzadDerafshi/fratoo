@@ -10,6 +10,11 @@
 // true ABV at a moment in time, and with it the bubble volume that would
 // have produced it. Formula sources and the reasoning behind each step:
 // ProjectDocs/DECISIONS.md "Calibrated bubble-volume ABV model".
+//
+// The bubble volume depends on the airlock's water level, so an "airlock
+// changed" event splits a batch into segments, each with its own volume
+// (DECISIONS.md "Airlock segments"). Without such events a batch is one
+// segment and everything below reduces to a single volume.
 
 import { correctTemperature, sustainedStartIndex } from '../common/fermentation-math';
 import { AbvFormula, FermentationSettings } from './fermentation-settings';
@@ -226,6 +231,11 @@ export interface GasPoint {
   cumulativeBubbles: number;
   /** Σ Δbubbles / molar volume at that interval's temperature — multiply by bubble volume (mL) to get moles of CO₂ out. */
   molesPerMl: number;
+  /** The airlock segment this point falls in (0 before the first airlock change). */
+  segment: number;
+  /** molesPerMl and cumulativeBubbles split by segment — index k pairs with segment k's bubble volume. */
+  segmentMolesPerMl: number[];
+  segmentBubbles: number[];
   tempC: number;
   /**
    * Sustained bubbling has started (sustainedStartIndex(), the same rule as
@@ -236,14 +246,25 @@ export interface GasPoint {
   saturated: boolean;
 }
 
+/** Index of the airlock segment a moment falls in, given the sorted times each later segment starts. */
+export function segmentAt(segmentStarts: Date[], t: Date): number {
+  let k = 0;
+  while (k < segmentStarts.length && segmentStarts[k].getTime() <= t.getTime()) k++;
+  return k;
+}
+
 /**
  * Walks V100/V101 chronologically, accumulating bubbles (positive deltas
  * only — a negative delta is a counter reset after a reboot, same rule as
  * ReadingsService) and converting each interval's bubbles to gas at the
  * temperature measured at the time, not a single fixed 22.4 L/mol.
+ * `segmentStarts` (sorted) are the airlock changes: an interval's bubbles
+ * count toward the segment its closing reading falls in.
  */
-export function buildGasSeries(rows: TelemetryRow[], settings: FermentationSettings): GasPoint[] {
+export function buildGasSeries(rows: TelemetryRow[], settings: FermentationSettings, segmentStarts: Date[] = []): GasPoint[] {
   const sorted = rows.slice().sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime());
+  const segmentMolesPerMl = new Array<number>(segmentStarts.length + 1).fill(0);
+  const segmentBubbles = new Array<number>(segmentStarts.length + 1).fill(0);
 
   const firstTemp = sorted.find((r) => r.pin === 'V101');
   let tempC =
@@ -263,12 +284,16 @@ export function buildGasSeries(rows: TelemetryRow[], settings: FermentationSetti
     }
     if (row.pin !== 'V100') continue;
 
+    const segment = segmentAt(segmentStarts, row.recordedAt);
     let rate = 0;
     if (prevCounter !== null && prevTime !== null) {
       const delta = row.value - prevCounter;
       if (delta > 0) {
+        const moles = delta / 1000 / gasMolarVolumeL(tempC, settings.pressureKpa);
         cumulativeBubbles += delta;
-        molesPerMl += delta / 1000 / gasMolarVolumeL(tempC, settings.pressureKpa);
+        molesPerMl += moles;
+        segmentBubbles[segment] += delta;
+        segmentMolesPerMl[segment] += moles;
         const minutes = (row.recordedAt.getTime() - prevTime) / 60_000;
         rate = minutes > 0 ? delta / minutes : 0;
       }
@@ -276,7 +301,16 @@ export function buildGasSeries(rows: TelemetryRow[], settings: FermentationSetti
     prevCounter = row.value;
     prevTime = row.recordedAt.getTime();
     rates.push(rate);
-    points.push({ time: row.recordedAt, cumulativeBubbles, molesPerMl, tempC, saturated: false });
+    points.push({
+      time: row.recordedAt,
+      cumulativeBubbles,
+      molesPerMl,
+      segment,
+      segmentMolesPerMl: segmentMolesPerMl.slice(),
+      segmentBubbles: segmentBubbles.slice(),
+      tempC,
+      saturated: false,
+    });
   }
 
   const start = sustainedStartIndex(rates);
@@ -292,7 +326,35 @@ export function gasAt(series: GasPoint[], t: Date, settings: FermentationSetting
     found = p;
   }
   if (found) return found;
-  return { time: t, cumulativeBubbles: 0, molesPerMl: 0, tempC: series[0]?.tempC ?? settings.fixedTemperatureC, saturated: false };
+  return {
+    time: t,
+    cumulativeBubbles: 0,
+    molesPerMl: 0,
+    segment: 0,
+    segmentMolesPerMl: [],
+    segmentBubbles: [],
+    tempC: series[0]?.tempC ?? settings.fixedTemperatureC,
+    saturated: false,
+  };
+}
+
+/** One bubble volume per segment; a single number (or a list shorter than the segments) repeats its last value. */
+export type BubbleVolumes = number | number[];
+
+function volumeOf(volumes: BubbleVolumes, segment: number): number {
+  if (typeof volumes === 'number') return volumes;
+  return volumes[Math.min(segment, volumes.length - 1)];
+}
+
+/** Moles of CO₂ that left through the airlock up to this point, each segment's bubbles at its own volume. */
+export function gasMolesOut(gas: GasPoint, volumes: BubbleVolumes): number {
+  if (typeof volumes === 'number') return gas.molesPerMl * volumes;
+  return gas.segmentMolesPerMl.reduce((sum, m, k) => sum + m * volumeOf(volumes, k), 0);
+}
+
+function co2LitersOut(gas: GasPoint, volumes: BubbleVolumes): number {
+  if (typeof volumes === 'number') return (gas.cumulativeBubbles * volumes) / 1000;
+  return gas.segmentBubbles.reduce((sum, b, k) => sum + b * volumeOf(volumes, k), 0) / 1000;
 }
 
 // ---------------------------------------------------------------------------
@@ -343,41 +405,64 @@ export interface CalibrationPoint {
   sg: number | null;
   measuredAbv: number | null;
   cumulativeBubbles: number;
+  /** Airlock segment the reading was taken in. */
+  segment: number;
+  /** Bubble volume of the reading's own segment that would explain it, given the volumes of earlier segments. */
   impliedBubbleVolumeMl: number | null;
   usable: boolean;
   /** Why the point can't calibrate, when it can't. */
   reason: string | null;
-  /** Filled in by estimateBatch() with the final bubble volume. */
+  /** Filled in by estimateBatch() with the final bubble volumes. */
   predictedSg: number | null;
   predictedAbv: number | null;
 }
 
-export interface CalibrationFit {
-  points: CalibrationPoint[];
-  /** Least-squares fit through the origin over usable points, or null. */
+export interface SegmentFit {
+  /** When the segment began: null for the first, else the airlock change that started it. */
+  startsAt: Date | null;
+  /** Fitted from the readings taken in this segment, or null when it has none. */
   fittedBubbleVolumeMl: number | null;
   usablePoints: number;
 }
 
+export interface CalibrationFit {
+  points: CalibrationPoint[];
+  /**
+   * The latest segment's fit that exists: what the batch caches and shares
+   * with other batches (the airlock as it was left). For a batch without
+   * airlock changes this is simply the batch's fit.
+   */
+  fittedBubbleVolumeMl: number | null;
+  /** Usable readings across the batch. */
+  usablePoints: number;
+  /** One per airlock segment; absent means a single segment matching the fields above. */
+  segments?: SegmentFit[];
+  /** Usable readings behind fittedBubbleVolumeMl: its weight in the learned volume. */
+  fittedPoints?: number;
+}
+
 /**
- * Each gravity reading gives one data point: measured ABV → CO₂ that must
- * have left → ÷ gas counted so far = implied bubble volume. Points are
- * combined with a least-squares fit through the origin, which naturally
- * weights later (larger-signal) readings more than early ones.
+ * Each gravity reading pins down the CO₂ that must have left by then.
+ * With one segment that is a least-squares fit through the origin, which
+ * naturally weights later (larger-signal) readings more than early ones.
+ * With airlock changes, the gas is a sum over segments (moles-per-mL of each
+ * segment × its volume), solved jointly for every segment that has a
+ * reading of its own; a segment without one takes `fallbackBubbleVolumeMl`
+ * (learned from other batches, or the default).
  */
 export function calibrate(
   batch: BatchModelInputs,
   readings: GravityInput[],
   series: GasPoint[],
   settings: FermentationSettings,
+  fallbackBubbleVolumeMl = settings.defaultBubbleVolumeMl,
+  segmentStarts: Date[] = [],
 ): CalibrationFit {
   const og = effectiveOg(batch, settings);
   const volume = batch.volumeLiters && batch.volumeLiters > 0 ? batch.volumeLiters : null;
+  const segmentCount = segmentStarts.length + 1;
 
-  let sumXY = 0;
-  let sumXX = 0;
-  let usablePoints = 0;
-
+  const rows: CalibrationRow[] = [];
   const points = readings
     .slice()
     .sort((a, b) => a.measuredAt.getTime() - b.measuredAt.getTime())
@@ -394,6 +479,7 @@ export function calibrate(
         sg,
         measuredAbv,
         cumulativeBubbles: gas.cumulativeBubbles,
+        segment: segmentAt(segmentStarts, r.measuredAt),
         impliedBubbleVolumeMl: null,
         usable: false,
         reason: null,
@@ -406,36 +492,158 @@ export function calibrate(
       if (sg === null || measuredAbv === null) return { ...point, reason: 'Gravity could not be converted' };
 
       const outMoles = co2OutFromAbv(measuredAbv, gas.tempC, volume, settings);
-      if (gas.molesPerMl > 0 && outMoles > 0) point.impliedBubbleVolumeMl = outMoles / gas.molesPerMl;
 
-      if (r.excludeFromCalibration) return { ...point, reason: 'Excluded by user' };
-      if (gas.cumulativeBubbles < settings.minCalibrationBubbles) return { ...point, reason: 'Too few bubbles counted yet' };
-      if (outMoles <= 0) return { ...point, reason: 'Gravity drop too small to measure past dissolved CO₂' };
+      if (r.excludeFromCalibration) point.reason = 'Excluded by user';
+      else if (gas.cumulativeBubbles < settings.minCalibrationBubbles) point.reason = 'Too few bubbles counted yet';
+      else if (outMoles <= 0) point.reason = 'Gravity drop too small to measure past dissolved CO₂';
+      else if (!((gas.segmentMolesPerMl[point.segment] ?? 0) > 0)) point.reason = 'No bubbles counted since the airlock change';
+      else point.usable = true;
 
-      sumXY += gas.molesPerMl * outMoles;
-      sumXX += gas.molesPerMl ** 2;
-      usablePoints++;
-      return { ...point, usable: true };
+      // The implied volume needs the fitted volumes of earlier segments, so it's filled in below.
+      rows.push({ point, gas, outMoles });
+      return point;
     });
 
-  return { points, fittedBubbleVolumeMl: sumXX > 0 ? sumXY / sumXX : null, usablePoints };
+  const usable = rows.filter((r) => r.point.usable);
+  const volumes = solveSegmentVolumes(usable, segmentCount, fallbackBubbleVolumeMl);
+
+  for (const { point, gas, outMoles } of rows) {
+    const own = gas.segmentMolesPerMl[point.segment] ?? 0;
+    if (own <= 0 || outMoles <= 0) continue;
+    const earlier = gas.segmentMolesPerMl.reduce((sum, m, k) => (k === point.segment ? sum : sum + m * volumes.all[k]), 0);
+    const implied = (outMoles - earlier) / own;
+    if (implied > 0) point.impliedBubbleVolumeMl = implied;
+  }
+
+  const segments: SegmentFit[] = Array.from({ length: segmentCount }, (_, k) => ({
+    startsAt: k === 0 ? null : segmentStarts[k - 1],
+    fittedBubbleVolumeMl: volumes.fitted[k],
+    usablePoints: usable.filter((r) => r.point.segment === k).length,
+  }));
+  const latest = [...segments].reverse().find((seg) => seg.fittedBubbleVolumeMl !== null) ?? null;
+
+  return {
+    points,
+    fittedBubbleVolumeMl: latest?.fittedBubbleVolumeMl ?? null,
+    usablePoints: usable.length,
+    segments,
+    fittedPoints: latest?.usablePoints ?? 0,
+  };
+}
+
+interface CalibrationRow {
+  point: CalibrationPoint;
+  gas: GasPoint;
+  outMoles: number;
+}
+
+/**
+ * Least squares for the volumes of segments that have a reading of their
+ * own; the rest are fixed at the fallback and moved to the known side. A
+ * fit that comes out non-physical (≤ 0, from noisy readings) drops that
+ * segment to the fallback and solves again.
+ */
+function solveSegmentVolumes(
+  rows: CalibrationRow[],
+  segmentCount: number,
+  fallback: number,
+): { fitted: (number | null)[]; all: number[] } {
+  const fitted = new Array<number | null>(segmentCount).fill(null);
+  let free = [...new Set(rows.map((r) => r.point.segment))].sort((a, b) => a - b);
+
+  while (free.length > 0) {
+    const n = free.length;
+    const ata = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+    const atb = new Array<number>(n).fill(0);
+    for (const { gas, outMoles } of rows) {
+      const x = free.map((k) => gas.segmentMolesPerMl[k] ?? 0);
+      const known = gas.segmentMolesPerMl.reduce((sum, m, k) => (free.includes(k) ? sum : sum + m * fallback), 0);
+      for (let i = 0; i < n; i++) {
+        atb[i] += x[i] * (outMoles - known);
+        for (let j = 0; j < n; j++) ata[i][j] += x[i] * x[j];
+      }
+    }
+    const solution = solveLinear(ata, atb);
+    if (solution !== null && solution.every((v) => v > 0)) {
+      free.forEach((k, i) => (fitted[k] = solution[i]));
+      break;
+    }
+    // Drop the latest offending segment: it has the least data behind it.
+    const bad = solution === null ? free : free.filter((_, i) => !(solution[i] > 0));
+    free = free.filter((k) => k !== bad[bad.length - 1]);
+  }
+
+  return { fitted, all: fitted.map((v) => v ?? fallback) };
+}
+
+/** Gaussian elimination with partial pivoting; null when singular. The systems here are tiny (one row per segment). */
+function solveLinear(a: number[][], b: number[]): number[] | null {
+  const n = b.length;
+  const m = a.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(m[r][col]) > Math.abs(m[pivot][col])) pivot = r;
+    if (Math.abs(m[pivot][col]) < 1e-30) return null;
+    [m[col], m[pivot]] = [m[pivot], m[col]];
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = m[r][col] / m[col][col];
+      for (let c = col; c <= n; c++) m[r][c] -= f * m[col][c];
+    }
+  }
+  return m.map((row, i) => row[n] / row[i]);
 }
 
 export type BubbleVolumeSource = 'batch-override' | 'batch-calibration' | 'learned' | 'default';
 
-/** Batch override → batch's own fit → learned from other batches → default (auto mode); override → default otherwise. */
+export interface ResolvedBubbleVolume {
+  /** The current (latest) segment's volume and where it came from: the dashboard's Bubble Volume tile. */
+  bubbleVolumeMl: number;
+  source: BubbleVolumeSource;
+  /** One per airlock segment, in order. */
+  volumes: number[];
+  sources: BubbleVolumeSource[];
+}
+
+/** Per segment: batch override → the segment's own fit → learned from other batches → default (auto mode); override → default otherwise. */
 export function resolveBubbleVolume(
   batch: BatchModelInputs,
   fit: CalibrationFit,
   learnedBubbleVolumeMl: number | null,
   settings: FermentationSettings,
-): { bubbleVolumeMl: number; source: BubbleVolumeSource } {
-  if (batch.bubbleVolumeMl !== null && batch.bubbleVolumeMl > 0) return { bubbleVolumeMl: batch.bubbleVolumeMl, source: 'batch-override' };
-  if (settings.calibrationMode === 'auto') {
-    if (fit.fittedBubbleVolumeMl !== null) return { bubbleVolumeMl: fit.fittedBubbleVolumeMl, source: 'batch-calibration' };
-    if (learnedBubbleVolumeMl !== null) return { bubbleVolumeMl: learnedBubbleVolumeMl, source: 'learned' };
-  }
-  return { bubbleVolumeMl: settings.defaultBubbleVolumeMl, source: 'default' };
+): ResolvedBubbleVolume {
+  const segments = fit.segments ?? [{ startsAt: null, fittedBubbleVolumeMl: fit.fittedBubbleVolumeMl, usablePoints: fit.usablePoints }];
+  const resolved = segments.map((seg): { ml: number; source: BubbleVolumeSource } => {
+    if (batch.bubbleVolumeMl !== null && batch.bubbleVolumeMl > 0) return { ml: batch.bubbleVolumeMl, source: 'batch-override' };
+    if (settings.calibrationMode === 'auto') {
+      if (seg.fittedBubbleVolumeMl !== null) return { ml: seg.fittedBubbleVolumeMl, source: 'batch-calibration' };
+      if (learnedBubbleVolumeMl !== null) return { ml: learnedBubbleVolumeMl, source: 'learned' };
+    }
+    return { ml: settings.defaultBubbleVolumeMl, source: 'default' };
+  });
+  const current = resolved[resolved.length - 1];
+  return {
+    bubbleVolumeMl: current.ml,
+    source: current.source,
+    volumes: resolved.map((r) => r.ml),
+    sources: resolved.map((r) => r.source),
+  };
+}
+
+/** What a segment without readings of its own falls back to: the same order resolveBubbleVolume() uses. */
+export function fallbackBubbleVolume(learnedBubbleVolumeMl: number | null, settings: FermentationSettings): number {
+  return settings.calibrationMode === 'auto' && learnedBubbleVolumeMl !== null ? learnedBubbleVolumeMl : settings.defaultBubbleVolumeMl;
+}
+
+/**
+ * Factor that puts a bubble rate from any segment into bubbles of the
+ * current segment's size (1 without airlock changes), so peaks, "now" and
+ * alert thresholds compare like with like across a water-level change.
+ */
+export function rateScaleAt(volumes: number[], segmentStarts: Date[], t: Date): number {
+  const current = volumes[volumes.length - 1];
+  const own = volumes[Math.min(segmentAt(segmentStarts, t), volumes.length - 1)];
+  return current > 0 ? own / current : 1;
 }
 
 /** Weighted mean of other batches' fits, weighted by their usable point count. */
@@ -460,8 +668,11 @@ export interface AbvEstimate {
 }
 
 export interface BatchEstimate extends AbvEstimate {
+  /** The current airlock segment's volume (the only one without airlock changes). */
   bubbleVolumeMl: number;
   bubbleVolumeSource: BubbleVolumeSource;
+  /** One entry per airlock segment, first to current. */
+  airlockSegments: { startsAt: Date | null; bubbleVolumeMl: number; source: BubbleVolumeSource; usablePoints: number }[];
   og: number | null;
   /** ABV the OG would give at expectedAttenuation. */
   expectedAbv: number | null;
@@ -479,19 +690,19 @@ export interface BatchEstimate extends AbvEstimate {
   warnings: string[];
 }
 
-/** ABV / gravity at one point of the series, for a given bubble volume. */
+/** ABV / gravity at one point of the series, for a given bubble volume (or one per airlock segment). */
 export function estimateAt(
   gas: GasPoint,
-  bubbleVolumeMl: number,
+  bubbleVolumeMl: BubbleVolumes,
   batch: BatchModelInputs,
   settings: FermentationSettings,
 ): AbvEstimate {
   const og = effectiveOg(batch, settings);
-  const co2Liters = (gas.cumulativeBubbles * bubbleVolumeMl) / 1000;
+  const co2Liters = co2LitersOut(gas, bubbleVolumeMl);
   const volume = batch.volumeLiters;
   if (!volume || volume <= 0) return { abv: null, abvCapped: false, estimatedSg: null, apparentAttenuation: null, co2Liters };
 
-  let abv = abvFromCo2Out(gas.molesPerMl * bubbleVolumeMl, gas.tempC, volume, settings, gas.saturated);
+  let abv = abvFromCo2Out(gasMolesOut(gas, bubbleVolumeMl), gas.tempC, volume, settings, gas.saturated);
   let abvCapped = false;
 
   if (og !== null && settings.capAbvToOg) {
@@ -514,17 +725,18 @@ export function estimateBatch(
   readings: GravityInput[],
   learnedBubbleVolumeMl: number | null,
   settings: FermentationSettings,
+  segmentStarts: Date[] = [],
 ): BatchEstimate {
-  const series = buildGasSeries(rows, settings);
-  const fit = calibrate(batch, readings, series, settings);
-  const { bubbleVolumeMl, source } = resolveBubbleVolume(batch, fit, learnedBubbleVolumeMl, settings);
+  const series = buildGasSeries(rows, settings, segmentStarts);
+  const fit = calibrate(batch, readings, series, settings, fallbackBubbleVolume(learnedBubbleVolumeMl, settings), segmentStarts);
+  const resolved = resolveBubbleVolume(batch, fit, learnedBubbleVolumeMl, settings);
   const og = effectiveOg(batch, settings);
 
   const last = series.length ? series[series.length - 1] : gasAt(series, new Date(), settings);
-  const current = estimateAt(last, bubbleVolumeMl, batch, settings);
+  const current = estimateAt(last, resolved.volumes, batch, settings);
 
   for (const p of fit.points) {
-    const predicted = estimateAt(gasAt(series, p.measuredAt, settings), bubbleVolumeMl, batch, settings);
+    const predicted = estimateAt(gasAt(series, p.measuredAt, settings), resolved.volumes, batch, settings);
     p.predictedAbv = predicted.abv;
     p.predictedSg = predicted.estimatedSg;
   }
@@ -538,13 +750,22 @@ export function estimateBatch(
   const warnings: string[] = [];
   if (!batch.volumeLiters) warnings.push('No batch volume set — ABV cannot be estimated.');
   if (og === null) warnings.push('No OG set — estimated gravity and attenuation are unavailable, and refractometer readings cannot calibrate.');
-  if (source === 'default') warnings.push('Using the default bubble volume — not yet calibrated by any gravity reading.');
+  if (resolved.source === 'default') warnings.push('Using the default bubble volume — not yet calibrated by any gravity reading.');
+  if (segmentStarts.length > 0 && resolved.source !== 'batch-calibration' && resolved.source !== 'batch-override') {
+    warnings.push('No gravity reading since the last airlock change — take one so the new bubble size can be calibrated.');
+  }
   if (current.abvCapped) warnings.push('Bubble count implies more alcohol than the OG allows — ABV capped; bubble volume is probably too large.');
 
   return {
     ...current,
-    bubbleVolumeMl,
-    bubbleVolumeSource: source,
+    bubbleVolumeMl: resolved.bubbleVolumeMl,
+    bubbleVolumeSource: resolved.source,
+    airlockSegments: (fit.segments ?? []).map((seg, k) => ({
+      startsAt: seg.startsAt,
+      bubbleVolumeMl: resolved.volumes[k],
+      source: resolved.sources[k],
+      usablePoints: seg.usablePoints,
+    })),
     og,
     expectedAbv,
     expectedAttenuation: og !== null && og > 1 ? expected.attenuation : null,

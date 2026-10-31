@@ -4,7 +4,7 @@ What's open, roughly in priority order. What has shipped is in the
 [CHANGELOG](../CHANGELOG.md); why things are built the way they are is in
 [DECISIONS.md](DECISIONS.md).
 
-## Where things stand (2.7)
+## Where things stand (2.8)
 
 - Standalone stack (NestJS bridge + Postgres + React PWA) in daily use since October 2026;
   the original WordPress plugin is retired.
@@ -15,6 +15,8 @@ What's open, roughly in priority order. What has shipped is in the
   restarted; each with a switch and thresholds.
 - Airlocks are discovered from their readings and named in Settings; batches pick one from
   a list.
+- An *Airlock changed* event gives the bubble volume a separate fit before and after a
+  water-level change; each batch can keep its calibration from being shared.
 
 ## Alerts
 
@@ -38,12 +40,6 @@ model".
       The first point (Oct 2026, 5 °Bx at 1.49 M bubbles) gave 0.280 mL/bubble against the
       0.3 mL default. Sensitivity on that batch: OG ±0.5 °Bx ≈ ±0.33% ABV; reading ±0.2 °Bx
       ≈ ±0.1%; WCF 1.00 vs 1.04 ≈ +0.2%.
-- [ ] **Bubble size changes mid-batch.** The model uses one bubble volume per batch, but the
-      volume depends on the airlock's water level. The second batch (Oct 2026) had its water
-      lowered on day 3: 2.1 mL/bubble before, roughly 0.13 after, so one fitted value
-      under-reads the start and over-reads the end, and its 260 bpm "peak" is only smaller
-      bubbles. Plan: an *Airlock changed* event that starts a new segment with its own
-      fitted volume, and peak/alerts on gas flow (mL/min) instead of bubbles per minute.
 - [ ] Calibrate the wort correction factor itself: a refractometer and a hydrometer reading
       of the same unfermented wort gives the WCF directly.
 - [ ] Once the learned bubble volume is stable across a few batches, **simplify the UI**:

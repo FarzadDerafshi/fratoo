@@ -13,8 +13,10 @@ import {
   calibrate,
   estimateAt,
   estimateBatch,
+  fallbackBubbleVolume,
   gasAt,
   learnBubbleVolume,
+  rateScaleAt,
   resolveBubbleVolume,
 } from './abv-model';
 import { DEFAULT_FERMENTATION_SETTINGS, FermentationSettings } from './fermentation-settings';
@@ -32,6 +34,8 @@ const SETTINGS_KEY = 'fermentation';
  * settings — so every write to any of those calls recalibrate() (or
  * recalibrateAll() for settings). New telemetry never invalidates it: a
  * calibration point only looks at bubbles counted up to its own timestamp.
+ * Airlock-changed events split the fit into segments, so adding, moving or
+ * removing one recalibrates too (BatchesController).
  */
 @Injectable()
 export class FermentationService {
@@ -128,9 +132,13 @@ export class FermentationService {
     let points = 0;
     if (gravity.length > 0) {
       const readings = await this.batches.getReadings(batchId);
-      const fit = calibrate(toModelInputs(batch), gravity, buildGasSeries(readings, s), s);
+      const starts = await this.airlockChanges(batchId);
+      // Only a segment without readings of its own needs the learned value.
+      const fallback = fallbackBubbleVolume(starts.length ? await this.learnedBubbleVolume(batchId) : null, s);
+      const fit = calibrate(toModelInputs(batch), gravity, buildGasSeries(readings, s, starts), s, fallback, starts);
+      // The airlock as it was left, weighted by its own readings: what other batches learn from.
       fitted = fit.fittedBubbleVolumeMl;
-      points = fit.usablePoints;
+      points = fit.fittedPoints ?? fit.usablePoints;
     }
 
     await this.batchRepo.update({ id: batchId }, { calibratedBubbleVolumeMl: fitted, calibrationPoints: points });
@@ -158,13 +166,37 @@ export class FermentationService {
     return learnBubbleVolume(others.map((b) => ({ bubbleVolumeMl: b.calibratedBubbleVolumeMl!, points: b.calibrationPoints })));
   }
 
+  /** When the airlock was refilled or swapped, oldest first: where each new bubble-volume segment starts. */
+  async airlockChanges(batchId: number): Promise<Date[]> {
+    const events = await this.batches.listEvents(batchId);
+    return events.filter((e) => e.kind === 'airlock').map((e) => e.occurredAt);
+  }
+
   // --- Estimates -----------------------------------------------------------
 
   async estimate(batch: BatchEntity, readings: ReadingEntity[]): Promise<BatchEstimate & { settings: FermentationSettings }> {
     const settings = await this.getSettings();
     const gravity = await this.gravityRepo.find({ where: { batchId: batch.id } });
     const learned = await this.learnedBubbleVolume(batch.id);
-    return { ...estimateBatch(toModelInputs(batch), readings, gravity, learned, settings), settings };
+    const starts = await this.airlockChanges(batch.id);
+    return { ...estimateBatch(toModelInputs(batch), readings, gravity, learned, settings, starts), settings };
+  }
+
+  /**
+   * The readings with every V100 bubble rate expressed in bubbles of the
+   * current airlock segment's size, so peak, "now", the chart and the alerts
+   * compare like with like across a water-level change. Unchanged for a
+   * batch without airlock changes. Counter values, and so the ABV model, are
+   * untouched. Pass `estimate` when it's already at hand.
+   */
+  async withComparableRates(batch: BatchEntity, readings: ReadingEntity[], estimate?: BatchEstimate): Promise<ReadingEntity[]> {
+    const starts = await this.airlockChanges(batch.id);
+    if (starts.length === 0) return readings;
+    const { airlockSegments } = estimate ?? (await this.estimate(batch, readings));
+    const volumes = airlockSegments.map((seg) => seg.bubbleVolumeMl);
+    return readings.map((r) =>
+      r.pin === 'V100' ? { ...r, bubbleRate: r.bubbleRate * rateScaleAt(volumes, starts, r.recordedAt) } : r,
+    );
   }
 
   /** ABV at any moment of the batch, with the same bubble volume the live estimate uses — for the report's daily snapshots. */
@@ -173,9 +205,11 @@ export class FermentationService {
     const gravity = await this.gravityRepo.find({ where: { batchId: batch.id } });
     const learned = await this.learnedBubbleVolume(batch.id);
     const inputs = toModelInputs(batch);
-    const series = buildGasSeries(readings, settings);
-    const { bubbleVolumeMl } = resolveBubbleVolume(inputs, calibrate(inputs, gravity, series, settings), learned, settings);
-    return (t: Date) => estimateAt(gasAt(series, t, settings), bubbleVolumeMl, inputs, settings).abv;
+    const starts = await this.airlockChanges(batch.id);
+    const series = buildGasSeries(readings, settings, starts);
+    const fit = calibrate(inputs, gravity, series, settings, fallbackBubbleVolume(learned, settings), starts);
+    const { volumes } = resolveBubbleVolume(inputs, fit, learned, settings);
+    return (t: Date) => estimateAt(gasAt(series, t, settings), volumes, inputs, settings).abv;
   }
 
   /**

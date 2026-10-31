@@ -37,6 +37,7 @@ export const EVENT_LABELS: Record<BatchEventKind, string> = {
   addition: 'Addition',
   temperature: 'Temperature change',
   disturbance: 'Disturbance',
+  airlock: 'Airlock changed',
   bottling: 'Bottling',
   other: 'Note',
 };

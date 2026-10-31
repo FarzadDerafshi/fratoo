@@ -41,7 +41,7 @@ export interface Batch {
   tastingNotes: string | null;
 }
 
-export type BatchEventKind = 'dry_hop' | 'addition' | 'temperature' | 'disturbance' | 'bottling' | 'other';
+export type BatchEventKind = 'dry_hop' | 'addition' | 'temperature' | 'disturbance' | 'airlock' | 'bottling' | 'other';
 
 /** GET /batches/:id/events — annotations on the chart and in the report. */
 export interface BatchEvent {
@@ -64,6 +64,15 @@ export interface Reading {
 
 export type BubbleVolumeSource = 'batch-override' | 'batch-calibration' | 'learned' | 'default';
 
+/** One stretch of the batch between airlock changes ("Airlock changed" events), with its own bubble volume. */
+export interface AirlockSegment {
+  /** null for the first segment. */
+  startsAt: string | null;
+  bubbleVolumeMl: number;
+  source: BubbleVolumeSource;
+  usablePoints: number;
+}
+
 export interface FermentationStats {
   totalBubbles: number;
   co2Liters: number;
@@ -78,6 +87,8 @@ export interface FermentationStats {
   targetAbv: number | null;
   bubbleVolumeMl: number;
   bubbleVolumeSource: BubbleVolumeSource;
+  /** More than one when the airlock was changed; rates are then in bubbles of the current size. */
+  airlockSegments: AirlockSegment[];
   /** Latest V100 rate / corrected temperature, and the newest reading's time (null without telemetry). */
   currentRate: number | null;
   currentTemp: number | null;
@@ -101,6 +112,8 @@ export interface CalibrationPoint {
   sg: number | null;
   measuredAbv: number | null;
   cumulativeBubbles: number;
+  /** Airlock segment the reading was taken in (0 before any airlock change). */
+  segment: number;
   impliedBubbleVolumeMl: number | null;
   usable: boolean;
   reason: string | null;
@@ -136,8 +149,10 @@ export interface FermentationEstimate {
   estimatedSg: number | null;
   apparentAttenuation: number | null;
   co2Liters: number;
+  /** The current airlock segment's volume. */
   bubbleVolumeMl: number;
   bubbleVolumeSource: BubbleVolumeSource;
+  airlockSegments: AirlockSegment[];
   og: number | null;
   expectedAbv: number | null;
   /** Yeast (or default) attenuation blended with the added sugar's share. */

@@ -5,6 +5,33 @@ Lightweight decision log — why things are built the way they are, not what the
 
 ---
 
+## 2026-10-31 — Airlock segments: one bubble volume per stretch between airlock changes (2.8.0)
+
+**Context:** the bubble volume depends mostly on the airlock's water depth. On the Oct 2026
+IPA the water was lowered on day 3; one fitted volume (0.438 mL) put the day-3 reading at
+0.8% against 3.0% measured and the day-10 one at 4.5% against 4.2%, and the "260 bpm peak"
+right after the change was only smaller bubbles.
+
+**Decisions:**
+- **An `airlock` event kind marks the change** — the first event that feeds the model. It's
+  an explicit statement by the brewer, not a guess from the data, which keeps the 2.4.0 rule
+  (events don't silently edit telemetry) in spirit. Detecting a change automatically from a
+  step in the rate was rejected: a rate step is also what a dry hop or a temperature change
+  looks like.
+- **The model splits the gas by segment** (`buildGasSeries(…, segmentStarts)`) and fits all
+  segments jointly: CO₂ out at a reading = Σ segment moles-per-mL × segment volume, least
+  squares over the readings. With one segment this is exactly the old fit through the origin.
+  A segment needs a reading of its own to be fitted; otherwise it takes the learned (or
+  default) volume and the batch shows a warning. A non-physical fit (≤ 0) drops the latest
+  offending segment to that fallback.
+- **Rates are rescaled, not converted to gas flow.** Showing mL/min everywhere was the first
+  plan, but every alert threshold and the brewer's own sense of "bpm" are in bubbles. So
+  rates from earlier segments are multiplied by (their volume ÷ the current one): bubbles of
+  today's size. Done on read (`withComparableRates()`), never stored, so recalibrating
+  changes the history consistently and the counters the ABV model uses are untouched.
+- **What's shared is the latest calibrated segment**, weighted by its own readings: that's
+  the airlock as it was left, which is what the next batch most likely starts with.
+
 ## 2026-10-31 — Calibration sharing is a per-batch switch, separate from excluding readings (2.8.0)
 
 The second real batch fitted 2.1 mL/bubble against the first batch's 0.28 (the airlock

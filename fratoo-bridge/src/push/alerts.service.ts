@@ -120,7 +120,7 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
     if (await this.wasSent(batch.id, FERMENTATION_STARTED)) return;
 
     const from = batch.pitchedAt ?? batch.startedAt;
-    const v100 = (await this.batches.getReadings(batch.id)).filter(
+    const v100 = (await this.fermentation.withComparableRates(batch, await this.batches.getReadings(batch.id))).filter(
       (r) => r.pin === 'V100' && r.recordedAt.getTime() >= from.getTime(),
     );
     const i = sustainedStartIndex(v100.map((r) => r.bubbleRate), true);
@@ -161,7 +161,8 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async checkBatch(batch: BatchEntity, s: NotificationSettings, now = new Date()): Promise<void> {
-    const readings = await this.batches.getReadings(batch.id);
+    // Rates in bubbles of the current airlock size, so a refilled airlock doesn't fake a peak or a stall.
+    const readings = await this.fermentation.withComparableRates(batch, await this.batches.getReadings(batch.id));
     const t = now.getTime();
 
     // Offline: nothing from the device for offlineMinutes. Not right after

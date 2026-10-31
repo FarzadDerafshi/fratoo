@@ -89,7 +89,11 @@ function setup(opts: {
   const sent: PushPayload[] = [];
   const push = { sendToAll: jest.fn((p: PushPayload) => (sent.push(p), Promise.resolve({ sent: 1, removed: 0, failed: 0 }))) };
   const batches = { getReadings: jest.fn().mockResolvedValue(opts.readings) };
-  const fermentation = { estimate: jest.fn().mockResolvedValue(opts.estimate ?? { abv: 4.6, expectedAbv: 4.9 }) };
+  const fermentation = {
+    estimate: jest.fn().mockResolvedValue(opts.estimate ?? { abv: 4.6, expectedAbv: 4.9 }),
+    // No airlock changes in these batches: rates pass through unchanged.
+    withComparableRates: jest.fn((_batch: unknown, readings: unknown) => Promise.resolve(readings)),
+  };
   const service = new AlertsService(
     dataSource,
     {} as ReadingsService,
