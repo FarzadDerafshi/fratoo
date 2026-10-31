@@ -5,6 +5,22 @@ Lightweight decision log — why things are built the way they are, not what the
 
 ---
 
+## 2026-10-31 — Calibration sharing is a per-batch switch, separate from excluding readings (2.8.0)
+
+The second real batch fitted 2.1 mL/bubble against the first batch's 0.28 (the airlock
+water was filled higher), and the learned value is a weighted mean of every batch's fit, so
+the next batch would have started several times too high. *Exclude from calibration* works
+per reading and only on the batch's own fit: excluding them keeps the odd value out of the
+learned mean, but the batch then falls back to the learned value, which is wrong for it.
+
+**Decision:** a `share_calibration` column on `batches`, default true. `learnedBubbleVolume()`
+only averages batches that share; the batch's own fit, and its readings, are untouched.
+**Why per batch, not per reading:** what makes a fit unrepresentative (the airlock fill, a
+leak) belongs to the batch, while *Exclude* stays for a reading that is itself wrong (a bad
+refractometer drop). **Why not drop outliers automatically:** with two or three batches
+there is no stable mean to call anything an outlier against, and a silent rule would be
+hard to reason about.
+
 ## 2026-10-24 — Airlocks are discovered from their readings, named in a separate table (2.7.0)
 
 Starting a batch meant pasting the airlock's 32-character Blynk token. Now a `devices` table

@@ -63,6 +63,7 @@ export class BatchesService {
         ogIncludesSugar: dto.ogIncludesSugar ?? true,
         targetAbv: dto.targetAbv ?? null,
         bubbleVolumeMl: dto.bubbleVolumeMl ?? null,
+        shareCalibration: dto.shareCalibration ?? true,
         yeastStrain: dto.yeastStrain?.trim() || null,
         yeastAttenuation: dto.yeastAttenuation ?? null,
         pitchedAt: dto.pitchedAt ? new Date(dto.pitchedAt) : null,
@@ -122,6 +123,7 @@ export class BatchesService {
     if (dto.ogIncludesSugar !== undefined) batch.ogIncludesSugar = dto.ogIncludesSugar;
     if (dto.targetAbv !== undefined) batch.targetAbv = dto.targetAbv;
     if (dto.bubbleVolumeMl !== undefined) batch.bubbleVolumeMl = dto.bubbleVolumeMl;
+    if (dto.shareCalibration !== undefined) batch.shareCalibration = dto.shareCalibration;
     if (dto.yeastStrain !== undefined) batch.yeastStrain = dto.yeastStrain?.trim() || null;
     if (dto.yeastAttenuation !== undefined) batch.yeastAttenuation = dto.yeastAttenuation;
     if (dto.pitchedAt !== undefined) batch.pitchedAt = dto.pitchedAt === null ? null : new Date(dto.pitchedAt);

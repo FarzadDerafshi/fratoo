@@ -477,6 +477,7 @@ export function BatchDetailPage() {
         ogIncludesSugar: form.get('ogIncludesSugar') === 'on',
         targetAbv: optionalNumber(form.get('targetAbv')),
         bubbleVolumeMl: optionalNumber(form.get('bubbleVolumeMl')),
+        shareCalibration: form.get('shareCalibration') === 'on',
         yeastStrain: String(form.get('yeastStrain') ?? '').trim() || null,
         yeastAttenuation: optionalNumber(form.get('yeastAttenuation')),
         pitchedAt: optionalDateTime(form.get('pitchedAt')),
@@ -717,10 +718,16 @@ export function BatchDetailPage() {
                 <input name="ogIncludesSugar" type="checkbox" defaultChecked={batch.ogIncludesSugar} />
                 OG measured after the added sugar was dissolved
               </label>
+              <label className="check span-all">
+                <input name="shareCalibration" type="checkbox" defaultChecked={batch.shareCalibration} />
+                Share this batch's calibration with future batches
+              </label>
               <p className="hint span-all">
                 Enter a refractometer OG as read (raw °Bx). Untick the sugar box if you measured the wort before adding
                 sugar: the added sugar is then converted to gravity points and added on top. Target ABV is for
-                comparison only. Leave the bubble volume override blank so gravity readings can calibrate it.
+                comparison only. Leave the bubble volume override blank so gravity readings can calibrate it. Untick
+                sharing for an odd batch (a different airlock fill, a leaky lid): it still uses its own readings, but
+                other batches don't learn from them.
               </p>
             </fieldset>
             <fieldset className="form-group">

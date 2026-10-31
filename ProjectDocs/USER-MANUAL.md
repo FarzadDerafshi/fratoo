@@ -259,6 +259,10 @@ bubble's gas volume is the unknown, and it's learned from the occasional gravity
    *learned from other batches* (once any batch has readings), *default (uncalibrated)*,
    or *manual override* (the *Bubble volume override* field in **Edit**, which beats
    everything; leave it blank to let calibration work).
+4. **Share this batch's calibration** (in **Edit** → *ABV model*, on by default) decides
+   whether new batches learn from this one. Turn it off when the batch isn't typical, for
+   example the airlock was filled to a different level or the lid leaked. The batch keeps
+   using its own readings either way; *Exclude* is for a single reading that's wrong.
 
 **ABV settings** (in the top bar) holds every assumption the model makes: default
 bubble volume, refractometer correction factor, ABV formula, pressure, temperature source,

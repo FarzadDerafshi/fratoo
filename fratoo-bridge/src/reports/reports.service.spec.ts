@@ -37,6 +37,7 @@ function makeBatch(overrides: Partial<BatchEntity> = {}): BatchEntity {
     bubbleVolumeMl: null,
     calibratedBubbleVolumeMl: null,
     calibrationPoints: 0,
+    shareCalibration: true,
     yeastStrain: null,
     yeastAttenuation: null,
     pitchedAt: null,

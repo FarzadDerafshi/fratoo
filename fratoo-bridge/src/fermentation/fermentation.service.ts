@@ -149,10 +149,10 @@ export class FermentationService {
     for (const id of ids) await this.recalibrate(id, settings);
   }
 
-  /** What every other calibrated batch agrees one bubble carries. */
+  /** What every other calibrated batch agrees one bubble carries — batches with sharing turned off keep their fit to themselves. */
   async learnedBubbleVolume(excludeBatchId: number): Promise<number | null> {
     const others = await this.batchRepo.find({
-      where: { id: Not(excludeBatchId), calibratedBubbleVolumeMl: Not(IsNull()) },
+      where: { id: Not(excludeBatchId), calibratedBubbleVolumeMl: Not(IsNull()), shareCalibration: true },
       select: { id: true, calibratedBubbleVolumeMl: true, calibrationPoints: true },
     });
     return learnBubbleVolume(others.map((b) => ({ bubbleVolumeMl: b.calibratedBubbleVolumeMl!, points: b.calibrationPoints })));

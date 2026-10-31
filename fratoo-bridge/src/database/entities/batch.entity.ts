@@ -61,6 +61,10 @@ export class BatchEntity {
   @Column({ name: 'calibration_points', type: 'integer', default: 0 })
   calibrationPoints: number;
 
+  /** Whether this batch's fit joins the learned bubble volume other batches start from (db/init/007_calibration_sharing.sql). */
+  @Column({ name: 'share_calibration', type: 'boolean', default: true })
+  shareCalibration: boolean;
+
   // Brew log — see db/init/003_brew_log.sql.
   @Column({ name: 'yeast_strain', type: 'varchar', length: 128, nullable: true })
   yeastStrain: string | null;

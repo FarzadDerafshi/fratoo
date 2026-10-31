@@ -36,6 +36,15 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+### Added
+
+- **Share calibration** switch per batch (**Edit** → *ABV model*, on by default). Turn it
+  off for an odd batch (a different airlock fill, a leaky lid): the batch still uses its own
+  gravity readings, but its bubble volume no longer joins the learned value new batches
+  start from. Until now the only choice was excluding the readings, which also took them
+  away from the batch itself.
+- Migration `007_calibration_sharing.sql` (applied by `ProdRelease.bat`).
+
 ---
 
 ## [2.7.0] — 2026-10-24 — **Airlocks**

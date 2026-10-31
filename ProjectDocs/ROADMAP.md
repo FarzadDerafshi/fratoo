@@ -38,14 +38,12 @@ model".
       The first point (Oct 2026, 5 °Bx at 1.49 M bubbles) gave 0.280 mL/bubble against the
       0.3 mL default. Sensitivity on that batch: OG ±0.5 °Bx ≈ ±0.33% ABV; reading ±0.2 °Bx
       ≈ ±0.1%; WCF 1.00 vs 1.04 ≈ +0.2%.
-- [ ] **Keep an odd batch's calibration to itself.** A batch whose readings fit is
-      calibrated from its own readings (right for that batch), but its fit also joins the
-      learned volume every other batch starts from. The second batch (Oct 2026) fitted
-      2.1 mL/bubble against the first batch's 0.28 (a likely lid leak, or a different
-      airlock fill), which would make the next batch read ~7× high until its first
-      reading. Add a per-batch "don't share this calibration" switch (or drop outliers
-      from the learned mean), separate from "Exclude from calibration", which would make
-      the leaky batch itself fall back to the learned value.
+- [ ] **Bubble size changes mid-batch.** The model uses one bubble volume per batch, but the
+      volume depends on the airlock's water level. The second batch (Oct 2026) had its water
+      lowered on day 3: 2.1 mL/bubble before, roughly 0.13 after, so one fitted value
+      under-reads the start and over-reads the end, and its 260 bpm "peak" is only smaller
+      bubbles. Plan: an *Airlock changed* event that starts a new segment with its own
+      fitted volume, and peak/alerts on gas flow (mL/min) instead of bubbles per minute.
 - [ ] Calibrate the wort correction factor itself: a refractometer and a hydrometer reading
       of the same unfermented wort gives the WCF directly.
 - [ ] Once the learned bubble volume is stable across a few batches, **simplify the UI**:

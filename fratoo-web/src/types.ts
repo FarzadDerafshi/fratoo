@@ -22,6 +22,8 @@ export interface Batch {
   /** Cached fit of this batch's own gravity readings (read-only). */
   calibratedBubbleVolumeMl: number | null;
   calibrationPoints: number;
+  /** Whether this batch's fit joins the learned bubble volume other batches start from. */
+  shareCalibration: boolean;
   // Brew log — see fratoo-bridge/db/init/003_brew_log.sql.
   yeastStrain: string | null;
   /** Typical apparent attenuation of the strain, percent. */

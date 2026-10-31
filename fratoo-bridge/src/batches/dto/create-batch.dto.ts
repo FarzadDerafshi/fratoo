@@ -51,6 +51,10 @@ export class CreateBatchDto {
   @Min(0.01)
   bubbleVolumeMl?: number;
 
+  @IsOptional()
+  @IsBoolean()
+  shareCalibration?: boolean;
+
   // Brew log — see db/init/003_brew_log.sql. Bottling and tasting fields
   // are only on UpdateBatchDto: nobody knows them when the batch starts.
   @IsOptional()

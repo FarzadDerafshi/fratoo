@@ -98,6 +98,10 @@ export class UpdateBatchDto {
   @Min(0.01)
   bubbleVolumeMl?: number | null;
 
+  @IsOptional()
+  @IsBoolean()
+  shareCalibration?: boolean;
+
   // Brew log — see db/init/003_brew_log.sql. All clearable with null.
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
