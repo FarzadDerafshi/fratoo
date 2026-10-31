@@ -36,6 +36,10 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+---
+
+## [2.8.0] — 2026-10-31 — **Airlock Changes**
+
 ### Added
 
 - **Share calibration** switch per batch (**Edit** → *ABV model*, on by default). Turn it
