@@ -429,6 +429,11 @@ export function BatchDetailPage() {
 
   async function handleComplete() {
     if (!batch) return;
+    const confirmed = window.confirm(
+      `Complete "${batch.batchCode}"? This sets its end date to now, so new telemetry stops counting toward it. You can reopen it from the ⋯ menu.`,
+    );
+    if (!confirmed) return;
+
     setBusy(true);
     try {
       setBatch(await api.post<Batch>(`/batches/${batch.id}/complete`));

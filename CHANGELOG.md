@@ -36,6 +36,11 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+### Changed
+
+- **Complete fermentation** now asks for confirmation first, so a stray tap no longer ends a
+  batch (and stops its telemetry) by accident.
+
 ---
 
 ## [2.8.0] — 2026-10-31 — **Airlock Changes**
