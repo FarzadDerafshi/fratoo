@@ -49,6 +49,10 @@ model".
 - [ ] Maybe: on a counter reset, count the new counter value as bubbles since the reboot
       instead of skipping it (`ReadingsService` and `buildGasSeries`). Negligible for ABV
       (~0.06% on the one reboot seen so far).
+- [ ] Maybe: after an *Airlock changed* event, take the peak rate from the current stretch
+      only. Earlier rates are rescaled by the volume ratio, and a before-change volume that
+      absorbed lost gas inflates them: the Oct 2026 IPA shows a 1,087 bpm "peak" (65–70 bpm
+      seen × 2.106 ÷ 0.135).
 
 ## Tests
 
