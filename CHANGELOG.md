@@ -36,6 +36,10 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+---
+
+## [2.8.1] — 2026-10-31 — **Complete Confirmation**
+
 ### Changed
 
 - **Complete fermentation** now asks for confirmation first, so a stray tap no longer ends a
