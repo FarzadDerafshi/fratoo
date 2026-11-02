@@ -5,6 +5,39 @@ Lightweight decision log — why things are built the way they are, not what the
 
 ---
 
+## 2026-11-02 — `ProdRelease.bat` starts its new version itself (release standard v2)
+
+**Problem:** when an update changed `ProdRelease.bat`, the script stopped ("run it again")
+with exit 0 and nothing built. By hand that's a second double-click; from the Telegram bot
+it relied on the runner noticing the changed script and running it once more.
+
+**Decision:** follow the shared release standard v2 (Mira AI Department,
+`RELEASE-SYSTEM.md` section 5, required 4), as GarajOS, MyRecipes and SIv2 do. The
+temporary copy compares itself with the updated file and, if they differ, copies the new
+version to a fresh temp name and `call`s it (`PRODRELEASE_RELAUNCHED=1`,
+`PRODRELEASE_LOGFILE`), then exits with its code. The relaunched run skips the database and
+`.env` backups; everything after the update (migrations, build, version check) runs as
+usual. A relaunched run that sees the script change again stops with exit 2 (loop guard);
+the bot's runner then runs it once more. The original keeps handing over with
+`--from-copy <root>`, now with `call`, so it can delete the copy and pause once. Delayed
+expansion stays off, because it would strip the `!` from the success line the runner
+looks for.
+
+**Not needed here:** the standard's `.last_release_commit` marker (rule 10) — nothing in
+this script depends on what changed, since step 4 re-applies every idempotent migration on
+each run. The commit check (rule 11: `GIT_COMMIT` build arg, `/api/version`) was already in
+place.
+
+**Tested offline** (throwaway bare remote + CRLF clone, stub `docker.exe`, a stub
+`/api/version`, run as `cmd /d /c "… < NUL"` like the runner): script change + new
+migration → one run, backups once, migrations once, one build, success, one log; loop
+guard → exit 2, nothing built, next run succeeds; build failure after the relaunch →
+`[ERROR]`, exit 1; nothing new; switch-over from the old script (stops once, the re-run is
+the new version); first deploy without Postgres; git failure → exit 1. One pause by hand,
+none unattended, no temp copies left.
+
+---
+
 ## 2026-10-31 — Airlock segments: one bubble volume per stretch between airlock changes (2.8.0)
 
 **Context:** the bubble volume depends mostly on the airlock's water depth. On the Oct 2026

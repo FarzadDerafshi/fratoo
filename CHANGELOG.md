@@ -36,6 +36,18 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+### Deployment
+
+#### Changed
+- **`ProdRelease.bat` starts its own new version** when the update changed the script,
+  instead of stopping and asking for a re-run (release standard v2). The new version skips
+  the backups the first run just took, applies the migrations, builds and appends to the
+  same log; run by hand it pauses once at the end, unattended never. A second script change
+  in the middle of that stops with exit code 2 (run it again). Every failure now ends with
+  `[ERROR]` and exit code 1. The temporary copy gets a new name each run.
+- `.gitattributes`: `.bat`, `.cmd`, `.ps1` and `.vbs` files are always checked out with
+  CRLF line endings, whatever the machine's git settings.
+
 ---
 
 ## [2.8.1] — 2026-10-31 — **Complete Confirmation**

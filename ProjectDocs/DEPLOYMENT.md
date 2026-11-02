@@ -90,10 +90,17 @@ run unattended, e.g. by a scheduler or a chat-ops bot). It:
 The server is down for a few minutes during a deploy. The batch page then shows an amber
 "No reading for …" until the next reading arrives; no bubbles are lost.
 
-**When an update changes `ProdRelease.bat` itself**, the script stops with
-"[STOP] … run ProdRelease.bat again" before rebuilding anything; just run it again. cmd
-reads a running `.bat` line by line from disk, so the script runs from a temporary copy and
-compares it with the updated file rather than executing a half-replaced script.
+**When an update changes `ProdRelease.bat` itself**, the script starts its new version by
+itself ("The update changed ProdRelease.bat itself -- starting the new version...") and
+that version finishes the release: no second backup, migrations and build as usual, same
+log file, one "press any key" at the end. cmd reads a running `.bat` line by line from
+disk, so the script runs from a temporary copy (a new name each time) and compares it with
+the updated file rather than executing a half-replaced script. Only if the script changes
+*again* while the new version starts (a push in between) does it stop with
+"[STOP] … Run ProdRelease.bat again" and exit code 2, with nothing rebuilt; just run it
+again. Exit codes: 0 released, 1 failed (`[ERROR]`), 2 run it again. Unattended runs
+(`PRODRELEASE_UNATTENDED=1`) never pause. The hand-over interface between an old and a new
+version is documented in the script's header and must stay stable.
 
 **DB credentials:** the backup and migration steps use `-U fratoo -d fratoo` (the
 `.env.example` defaults). Change those lines if your `.env` uses other values.

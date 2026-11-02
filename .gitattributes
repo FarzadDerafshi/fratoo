@@ -1,0 +1,5 @@
+# Windows scripts always get CRLF (cmd misreads LF-only .bat files)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.vbs text eol=crlf

@@ -1,5 +1,32 @@
 @echo off
-setlocal
+setlocal EnableExtensions DisableDelayedExpansion
+
+:: Fratoo production release (release standard v2, see Mira AI Department's
+:: ProjectDocs/RELEASE-SYSTEM.md section 5). Run from the repo root on the
+:: server (D:\apps\Fratoo), by double-click or by the Telegram /release
+:: runner. See ProjectDocs/DEPLOYMENT.md "Routine deploys".
+::
+:: Exit codes: 0 released, 1 failed ([ERROR]), 2 run it again (loop guard,
+::             see below).
+::
+:: It runs from a temporary copy of itself: cmd reads a .bat line by line
+:: from disk, so step 3's update rewriting this file mid-run would make cmd
+:: execute garbage. If the update changed this script, the copy starts the
+:: new version in place (same log, no second backup; migrations and build
+:: as usual) and exits with its exit code. If that new version sees the
+:: script change once more, it stops with exit 2 instead (loop guard).
+:: Nothing here depends on what changed (step 4 re-applies every idempotent
+:: migration on each run), so there is no .last_release_commit marker.
+::
+:: Hand-over interface -- an old copy must be able to start a new version,
+:: so keep these exactly as they are:
+::   ProdRelease.bat --from-copy <root folder>
+::     runs the release itself from a temporary copy; <root folder> ends
+::     with a backslash. Its exit code is the release's exit code.
+::   PRODRELEASE_UNATTENDED=1    started by the Telegram runner: no pause
+::   PRODRELEASE_RELAUNCHED=1    the new version, started after a
+::                               self-update: skips the backups (steps 1-2)
+::   PRODRELEASE_LOGFILE=<path>  with RELAUNCHED: the log to append to
 
 :: --- Self-elevate to Administrator if not already running elevated ---
 net session >nul 2>&1
@@ -9,19 +36,33 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-:: --- Run from a temporary copy of this script. cmd reads a running .bat
-::     line by line from disk, so step 3's update replacing this very
-::     file mid-run would make it execute garbled lines. The original hands
-::     over to the copy (no CALL, outside any (...) block, so control never
-::     comes back to the original) and passes its own folder along. Step 3
-::     then stops if the update changed this script, so the new version runs
-::     from its first line on the next attempt. ---
-if /i "%~1"=="--from-copy" goto :running_from_copy
-copy /y "%~f0" "%TEMP%\fratoo_prodrelease.bat" >nul
-"%TEMP%\fratoo_prodrelease.bat" --from-copy "%~dp0"
-:running_from_copy
+:: --- Run from a temporary copy of this script (see the header). A new
+::     name every time: a fixed one would let a relaunched new version
+::     overwrite the copy that is still running. Everything up to the exit
+::     stays inside this one (...) block, so cmd has read all of it before
+::     step 3 can change this file. Run by hand, the window waits for a key
+::     once, here at the very end; the copy itself never pauses. "call set"
+::     reads the copy's exit code when the line runs (a plain %ERRORLEVEL%
+::     in a block is read when the block is parsed). Delayed expansion
+::     stays off for the release itself (it would strip the "!" from the
+::     success line the Telegram runner looks for) and is switched on only
+::     for the last line, after the copy is gone. ---
+set "SELF_COPY=%TEMP%\fratoo_prodrelease_%RANDOM%%RANDOM%.bat"
+if /i not "%~1"=="--from-copy" (
+    copy /y "%~f0" "%SELF_COPY%" >nul || (
+        echo [ERROR] Could not copy ProdRelease.bat to the TEMP folder.
+        if not "%PRODRELEASE_UNATTENDED%"=="1" pause
+        exit /b 1
+    )
+    call "%SELF_COPY%" --from-copy "%~dp0"
+    call set "RC=%%ERRORLEVEL%%"
+    del "%SELF_COPY%" >nul 2>&1
+    if not "%PRODRELEASE_UNATTENDED%"=="1" pause
+    setlocal EnableDelayedExpansion
+    exit /b !RC!
+)
 set "ROOT=%~2"
-set "SELF_COPY=%~f0"
+set "LOGFILE="
 
 :: --- Always operate from the project root (where the original script
 ::     lives), regardless of the working directory it was launched from
@@ -32,15 +73,35 @@ cd /d "%ROOT%"
 :: --- Timestamped log file, saved next to this script. Only the fast
 ::     steps (backups, git update, final container check) are logged here --
 ::     the Docker build prints live to the console instead so it's obvious
-::     the script is still alive during that multi-minute step, not frozen. ---
+::     the script is still alive during that multi-minute step, not frozen.
+::     A relaunched new version appends to the first run's log. ---
 for /f %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TS=%%T"
+if not "%PRODRELEASE_RELAUNCHED%"=="1" goto :new_log
+if not defined PRODRELEASE_LOGFILE goto :new_log
+set "LOGFILE=%PRODRELEASE_LOGFILE%"
+echo --- New version of ProdRelease.bat started --- >> "%LOGFILE%"
+goto :log_ready
+:new_log
 set "LOGFILE=%ROOT%deploy_log_%TS%.txt"
-echo Log file: %LOGFILE%
 echo Log file: %LOGFILE% > "%LOGFILE%"
+:log_ready
+echo Log file: %LOGFILE%
 
 echo ==========================================
-echo Starting Fratoo Production Release...
+if "%PRODRELEASE_RELAUNCHED%"=="1" (
+    echo Starting Fratoo Production Release - new version of ProdRelease.bat...
+) else (
+    echo Starting Fratoo Production Release...
+)
 echo ==========================================
+
+:: A relaunched new version skips steps 1 and 2: the first run took both
+:: backups a moment ago, and nothing has been rebuilt since.
+if not "%PRODRELEASE_RELAUNCHED%"=="1" goto :backups
+echo [1/6] Database backup already taken by the first run -- skipped.
+echo [2/6] .env backup already taken by the first run -- skipped.
+goto :backups_done
+:backups
 
 :: Step 1: Back up the Postgres database, if it's already running. Skipped
 :: (not failed) on a brand-new deployment where the fratoo-postgres
@@ -62,8 +123,7 @@ if errorlevel 1 goto :no_db_backup
 docker exec fratoo-postgres pg_dump -U fratoo -d fratoo > "%BACKUP_FILE%"
 if errorlevel 1 (
     echo [ERROR] Database backup failed! Aborting before touching any code or containers.
-    pause
-    exit /b 1
+    goto :fail
 )
 echo Backup saved: %BACKUP_FILE%
 goto :db_backup_done
@@ -89,39 +149,52 @@ if exist "%ROOT%fratoo-bridge\.env" (
     copy /y "%ROOT%fratoo-bridge\.env" "%ROOT%ConfigBackup\fratoo-bridge-env_%TS%.bak" >nul
     echo Backup saved: ConfigBackup\fratoo-bridge-env_%TS%.bak
 )
+:backups_done
 
 :: Step 3: Get the latest code from GitHub. Fetch + forced checkout rather
 :: than git pull: the server never commits, so origin/main is always the
 :: truth, and this keeps working even if the GitHub history is replaced
 :: (a fresh, unrelated history makes git pull refuse to merge). Tracked
 :: files are overwritten; untracked and gitignored ones (.env, DB_Backup\,
-:: ConfigBackup\, logs) are left alone.
+:: ConfigBackup\, logs) are left alone. The git output goes to a temp file
+:: first, then to the screen and the log (a relaunched new version's log
+:: already holds the first run's lines, so the log isn't shown whole).
 echo [3/6] Getting latest code from Git...
+set "OLD_COMMIT="
+set "NEW_COMMIT="
 for /f %%C in ('git rev-parse --short HEAD') do set "OLD_COMMIT=%%C"
-git fetch origin +main:refs/remotes/origin/main >> "%LOGFILE%" 2>&1
+set "GIT_OUT=%TEMP%\fratoo_git_%RANDOM%%RANDOM%.txt"
+git fetch origin +main:refs/remotes/origin/main > "%GIT_OUT%" 2>&1
 if errorlevel 1 goto :git_failed
-git checkout -f -B main origin/main >> "%LOGFILE%" 2>&1
+git checkout -f -B main origin/main >> "%GIT_OUT%" 2>&1
 if errorlevel 1 goto :git_failed
 for /f %%C in ('git rev-parse --short HEAD') do set "NEW_COMMIT=%%C"
-echo Code: %OLD_COMMIT% -^> %NEW_COMMIT% >> "%LOGFILE%"
-type "%LOGFILE%"
-goto :git_done
-:git_failed
-type "%LOGFILE%"
-echo [ERROR] Getting the code from Git failed! See log: %LOGFILE%
-pause
-exit /b 1
-:git_done
-fc /b "%SELF_COPY%" "%ROOT%ProdRelease.bat" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo.
-    echo [STOP] This update changed ProdRelease.bat itself. Nothing has been
-    echo        rebuilt yet -- just run ProdRelease.bat again so the new
-    echo        version runs from the start. ^(Backups above are kept.^)
-    echo ProdRelease.bat changed by update -- stopped for re-run. >> "%LOGFILE%"
-    pause
-    exit /b 0
+echo Code: %OLD_COMMIT% -^> %NEW_COMMIT% >> "%GIT_OUT%"
+type "%GIT_OUT%"
+type "%GIT_OUT%" >> "%LOGFILE%"
+del "%GIT_OUT%" >nul 2>&1
+
+:: The update changed this script: start the new version in place. This
+:: copy is not touched by the update, so it can safely wait for it here.
+fc /b "%~f0" "%ROOT%ProdRelease.bat" >nul 2>&1
+if not errorlevel 1 goto :script_current
+if "%PRODRELEASE_RELAUNCHED%"=="1" goto :rerun
+echo The update changed ProdRelease.bat itself -- starting the new version...
+echo ProdRelease.bat changed by update -- starting the new version. >> "%LOGFILE%"
+set "NEW_COPY=%TEMP%\fratoo_prodrelease_%RANDOM%%RANDOM%.bat"
+copy /y "%ROOT%ProdRelease.bat" "%NEW_COPY%" >nul
+if errorlevel 1 (
+    echo [ERROR] Could not copy the new ProdRelease.bat to the TEMP folder.
+    goto :fail
 )
+set "PRODRELEASE_RELAUNCHED=1"
+set "PRODRELEASE_LOGFILE=%LOGFILE%"
+call "%NEW_COPY%" --from-copy "%ROOT%"
+set "RC=%ERRORLEVEL%"
+del "%NEW_COPY%" >nul 2>&1
+endlocal & exit /b %RC%
+
+:script_current
 
 :: Step 4: Apply database migrations. Postgres only runs db\init\*.sql by
 :: itself on a brand-new empty volume -- an existing volume already has data, so
@@ -146,8 +219,7 @@ for %%F in ("%ROOT%fratoo-bridge\db\init\*.sql") do (
         docker exec -i fratoo-postgres psql -U fratoo -d fratoo -v ON_ERROR_STOP=1 -q < "%%F" >> "%LOGFILE%" 2>&1 || (
             echo [ERROR] Migration %%~nxF failed! See log: %LOGFILE%
             echo The database backup from step 1 is in DB_Backup\ if anything needs restoring.
-            pause
-            exit /b 1
+            goto :fail
         )
     )
 )
@@ -167,11 +239,9 @@ for /f %%C in ('git rev-parse --short HEAD') do set "GIT_COMMIT=%%C"
 echo [5/6] Rebuilding and restarting the stack ^(postgres + api + web^) at commit %GIT_COMMIT%...
 echo Building commit %GIT_COMMIT% >> "%LOGFILE%"
 docker compose up -d --build
-set "BUILD_RESULT=%errorlevel%"
-if %BUILD_RESULT% neq 0 (
+if errorlevel 1 (
     echo [ERROR] Docker compose failed!
-    pause
-    exit /b %BUILD_RESULT%
+    goto :fail
 )
 
 :: Step 6: Show the running containers and confirm port 1234 is actually
@@ -194,5 +264,28 @@ echo Reminder: the Airlock reconnects on its own ~4m47s wake cycle --
 echo give it a few minutes, then "docker compose logs -f api" if you
 echo want to confirm live telemetry resumed.
 echo ==========================================
-pause
-endlocal
+echo Release successful at %GIT_COMMIT%. >> "%LOGFILE%"
+set "RC=0"
+goto :end
+
+:git_failed
+type "%GIT_OUT%"
+type "%GIT_OUT%" >> "%LOGFILE%"
+del "%GIT_OUT%" >nul 2>&1
+echo [ERROR] Getting the code from Git failed! See log: %LOGFILE%
+goto :fail
+
+:fail
+if defined LOGFILE echo Release FAILED. >> "%LOGFILE%"
+echo === Release FAILED -- see the [ERROR] above. ===
+set "RC=1"
+goto :end
+
+:rerun
+echo [STOP] ProdRelease.bat changed again while its new version was starting.
+echo        Nothing has been rebuilt. Run ProdRelease.bat again.
+echo Loop guard: ProdRelease.bat changed again -- stopped. >> "%LOGFILE%"
+set "RC=2"
+
+:end
+endlocal & exit /b %RC%
