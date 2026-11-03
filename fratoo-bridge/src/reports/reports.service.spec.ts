@@ -340,4 +340,43 @@ describe('ReportsService', () => {
   it('names the PDF like the HTML', () => {
     expect(service.reportFilename(makeBatch(), 'pdf')).toMatch(/^fratoo-report-.+-\d{4}-\d\d-\d\d\.pdf$/);
   });
+
+  it('lets long cards run across pages and keeps short side-by-side cards their own height', () => {
+    const para =
+      'Used Erikli water. Temp was relatively cooler. Used hot water to rinse the fermenter. The fermenter was washed after the previous batch, and the yeast was hydrated for 10 minutes before pitching.';
+    const notes = Array.from({ length: 14 }, (_, i) => `Check ${i + 1}:\n${para} ${para}`).join('\n\n');
+    const event = (day: number, kind: BatchEventEntity['kind'], text: string) =>
+      Object.assign(new BatchEventEntity(), {
+        id: day,
+        batchId: 1,
+        occurredAt: new Date(START.getTime() + day * 1440 * MIN),
+        kind,
+        notes: text,
+        createdAt: START,
+      });
+    const html = service.generateReportHtml(
+      makeInput(
+        makeBatch({
+          batchCode: 'IPA 2026.10',
+          notes,
+          yeastStrain: 'SafAle US-05',
+          yeastAttenuation: 70,
+          pitchedAt: new Date(START.getTime() + 13 * MIN),
+          pitchTempC: 25,
+          targetAbv: 5.5,
+        }),
+        true,
+        [
+          event(2.5, 'airlock', 'Airlock water level lowered'),
+          event(9.5, 'dry_hop', 'Opened the cap, pressed the lid to count the max bubbles.'),
+        ],
+      ),
+      'pdf',
+    );
+    expect(html).toContain('<section class="card section-card long-card"><h2>Notes</h2>');
+    expect(html).toMatch(/\.long-card, \.table-card \{[^}]*break-inside: auto/);
+    expect(html).toContain('box-decoration-break: clone');
+    if (process.env.REPORT_SAMPLE)
+      writeFileSync(process.env.REPORT_SAMPLE.replace(/\.html$/, '-ipa.html'), html);
+  });
 });

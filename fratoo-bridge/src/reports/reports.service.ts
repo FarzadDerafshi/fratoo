@@ -579,8 +579,7 @@ export class ReportsService {
         (e) => `
 				<tr>
 					<td>Day ${dayOf(batch.startedAt, e.occurredAt)}<div class="sub">${escapeHtml(formatTimestamp(e.occurredAt))}</div></td>
-					<td><span class="pill event">${escapeHtml(EVENT_LABELS[e.kind] ?? e.kind)}</span></td>
-					<td>${e.notes ? escapeHtml(e.notes) : ''}</td>
+					<td><span class="pill event">${escapeHtml(EVENT_LABELS[e.kind] ?? e.kind)}</span>${e.notes ? `<div class="event-note">${escapeHtml(e.notes)}</div>` : ''}</td>
 				</tr>`,
       )
       .join('');
@@ -824,6 +823,10 @@ ${assets.fontCss}
 	.kv-list { display: flex; flex-direction: column; gap: 6px; }
 	.text-block { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 	.events-table td { padding: 6px 8px 6px 0; }
+	/* The note goes under its label, so it gets the card's width, not a narrow third column. */
+	.events-table td:first-child { white-space: nowrap; }
+	.events-table td:last-child { width: 100%; }
+	.event-note { margin-top: 4px; }
 	.pill.event { background: var(--warn-soft); color: var(--warn); }
 	.chart-box { position: relative; width: 100%; height: 340px; }
 
@@ -891,7 +894,8 @@ ${assets.fontCss}
 		.side-group { gap: 3px; }
 		.big-value { font-size: 18px; }
 		.kv { font-size: 12px; }
-		.legend { font-size: 11px; margin-bottom: 4px; }
+		.legend { font-size: 10.5px; gap: 4px 10px; margin-bottom: 4px; }
+		.legend i { width: 12px; margin-right: 4px; }
 		.highlights { gap: 12px; }
 		.highlight { padding: 10px 14px; }
 		.highlight .label { font-size: 10px; }
@@ -899,9 +903,16 @@ ${assets.fontCss}
 		.highlight .sub { font-size: 10.5px; }
 		/* The chart and its highlights move to the next page together if a long header pushes them off page 1. */
 		.trend { break-inside: avoid; }
-		.table-card { break-inside: auto; }
+		/* Long notes and tables run on across pages; each piece keeps its border and padding. */
+		.long-card, .table-card { break-inside: auto; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+		/* Side-by-side cards keep their own height on paper (no tall empty box next to a long brew log). */
+		.grid-even { align-items: start; }
+		/* No heading left alone at the bottom of a page, no footnote split over two. */
+		h2, .rich h4, .rich p.label { break-after: avoid; }
+		.footnote { break-inside: avoid; }
 		.report-table thead { display: table-header-group; }
-		@page { size: A4; margin: 12mm; }
+		/* Same as PdfService's Gotenberg margins (0.6 in), so the page footer lines up with the content. */
+		@page { size: A4; margin: 15mm; }
 	}
 </style>
 </head>
@@ -1000,7 +1011,7 @@ ${assets.fontCss}
 
 	${logCards}
 
-	${batch.notes && isLongNote(batch.notes) ? `<section class="card section-card"><h2>Notes</h2><div class="rich">${renderNotesHtml(batch.notes)}</div></section>` : ''}
+	${batch.notes && isLongNote(batch.notes) ? `<section class="card section-card long-card"><h2>Notes</h2><div class="rich">${renderNotesHtml(batch.notes)}</div></section>` : ''}
 
 	<section class="card section table-card">
 		<h2>Gravity readings</h2>

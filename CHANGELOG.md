@@ -38,6 +38,19 @@ are kept as the project's record.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **PDF report layout:** the footer now lines up with the content (page margins 15 mm, the
+  same as the PDF renderer's); long notes and tables run on right after the brew log instead
+  of jumping to a new page, and each piece of a split card keeps its border; *In the glass*
+  no longer stretches to the brew log's height; event notes sit under their label instead of
+  in a narrow column; the chart legend fits on one line; no heading is left alone at the
+  bottom of a page and the footnote isn't split.
+
+---
+
 ## [2.9.0] — 2026-11-03 — **PDF Reports**
 
 ### Added
