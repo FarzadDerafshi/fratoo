@@ -29,7 +29,8 @@ printable batch reports and push alerts.
 - **Brew log** — OG, yeast and attenuation, pitch time and temperature, sugar, hops,
   bottling (priming, carbonation, bottled ABV, calories), tasting notes, and timestamped
   events (dry hop, disturbance…) marked on the chart.
-- **Batch report** — a self-contained, print-ready HTML file (A4 PDF via the browser).
+- **Batch report** — an A4 PDF made on the server (Gotenberg), plus the same report as a
+  print view in the browser.
 - **Push notifications** — fermentation started, airlock offline / back online, no start,
   temperature out of range, peak passed, looks finished, possibly stalled, airlock
   restarted; each with an on/off switch and thresholds.

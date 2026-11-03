@@ -17,6 +17,7 @@ import type {
 } from '../fermentation/abv-model';
 import type { FermentationSettings } from '../fermentation/fermentation-settings';
 import type { ReadingWindowStats } from '../readings/readings.service';
+import { reportAssets } from './report-assets';
 
 // Caps the number of points sent to Chart.js so a multi-week, 12k-row batch
 // still renders (and prints) instantly. Endpoints are always preserved.
@@ -45,6 +46,12 @@ export interface ReportInput {
   /** The device's name from Settings → Devices, if it has one. */
   deviceName?: string | null;
 }
+
+/**
+ * 'screen': the print view opened from the dashboard (with a Print button).
+ * 'pdf': the same page for Gotenberg, without the button.
+ */
+export type ReportMode = 'screen' | 'pdf';
 
 interface DailySnapshot {
   day: number;
@@ -107,22 +114,23 @@ const BUBBLE_SOURCE_LABELS: Record<BubbleVolumeSource, string> = {
  * line, gaps and gravity markers, the gravity readings, fermentation
  * highlights, daily 21:00 snapshots and notes. Originally a port of
  * includes/class-fratoo-report.php in the WordPress plugin (see
- * ProjectDocs/ARCHITECTURE.md); the PHP one keeps the old layout. Streamed as
- * a file download by BatchesController.
+ * ProjectDocs/ARCHITECTURE.md). Chart.js and the fonts are inlined (see
+ * report-assets.ts), so the page needs nothing from the network. The same
+ * page is the print view and, through PdfService, the PDF.
  */
 @Injectable()
 export class ReportsService {
-  reportFilename(batch: BatchEntity): string {
+  reportFilename(batch: BatchEntity, ext: 'html' | 'pdf' = 'html'): string {
     const slug =
       batch.batchCode
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '') || 'batch';
     const date = new Date().toISOString().slice(0, 10);
-    return `fratoo-report-${slug}-${date}.html`;
+    return `fratoo-report-${slug}-${date}.${ext}`;
   }
 
-  generateReportHtml(input: ReportInput): string {
+  generateReportHtml(input: ReportInput, mode: ReportMode = 'screen'): string {
     const v100 = input.readings.filter((r) => r.pin === 'V100');
     const v101 = input.readings.filter((r) => r.pin === 'V101');
 
@@ -141,7 +149,7 @@ export class ReportsService {
     highlights.lagFromPitch = input.batch.pitchedAt !== null;
     const chartData = this.buildChartData(v100, v101, input);
 
-    return this.renderHtml(input, snapshots, highlights, chartData);
+    return this.renderHtml(input, snapshots, highlights, chartData, mode);
   }
 
   // MODULE 1 — Daily 21:00 snapshots. Single chronological pass over V100,
@@ -407,8 +415,10 @@ export class ReportsService {
     snapshots: DailySnapshot[],
     highlights: Highlights,
     chartData: ChartData,
+    mode: ReportMode,
   ): string {
     const { batch, stats, estimate, gravity } = input;
+    const assets = reportAssets();
     const active = batch.status !== 'completed';
     const brewType = batch.brewType.replace(/_/g, ' ');
     const generated = formatTimestamp(new Date());
@@ -701,10 +711,8 @@ export class ReportsService {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(`Fermentation Report — ${batch.batchCode}`)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
 <style>
+${assets.fontCss}
 	:root {
 		--bg: #f7f5ef;
 		--surface: #ffffff;
@@ -848,10 +856,8 @@ export class ReportsService {
 		.print-bar { display: none; }
 		.report { max-width: none; padding: 0; }
 		.card { break-inside: avoid; }
-		.chart-box { height: 300px; }
+		.chart-box { height: 230px; }
 		.chart-box canvas { width: 100% !important; height: 100% !important; }
-		.abv-value { font-size: 52px; }
-		.mini-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 		.table-wrap { overflow: visible; }
 		table.report-table { font-size: 10.5px; }
 		.report-table th, .report-table td { padding: 6px; }
@@ -861,6 +867,40 @@ export class ReportsService {
 		.report-table tr { break-inside: avoid; }
 		.pill, .mini-stat, .notes, .warnings, .abv-track, .abv-marker, .abv-key { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 		.section-card, .grid-even { break-inside: avoid; }
+		/* Summary on page 1, the detail from page 2. Long tables may run onto the next page (the header row repeats). */
+		.details { break-before: page; }
+		/* Tighter page 1, so header, ABV, activity, chart and highlights share one A4 page. */
+		.brand-row { padding-bottom: 10px; margin-bottom: 12px; }
+		h1 { font-size: 22px; }
+		.title-row { margin-bottom: 6px; }
+		.meta-row { font-size: 11.5px; margin-bottom: 8px; }
+		.notes { padding: 8px 12px; margin-bottom: 12px; font-size: 12px; }
+		.card { padding: 14px 16px; border-radius: 12px; }
+		.grid-2, .grid-even { gap: 12px; margin-bottom: 12px; }
+		.section, .section-card { margin-bottom: 12px; }
+		.section h2, .section-card h2 { font-size: 14px; }
+		.section h2 { margin-bottom: 8px; }
+		.abv-value { font-size: 40px; }
+		.abv-figure { margin: 6px 0 10px; }
+		.hint { font-size: 11px; margin-top: 6px; }
+		.mini-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+		.mini-stat { padding: 7px 9px; border-radius: 10px; }
+		.mini-label, .mini-sub { font-size: 10px; }
+		.mini-value { font-size: 14px; }
+		.side-card { gap: 8px; }
+		.side-group { gap: 3px; }
+		.big-value { font-size: 18px; }
+		.kv { font-size: 12px; }
+		.legend { font-size: 11px; margin-bottom: 4px; }
+		.highlights { gap: 12px; }
+		.highlight { padding: 10px 14px; }
+		.highlight .label { font-size: 10px; }
+		.highlight .value { font-size: 16px; margin-top: 2px; }
+		.highlight .sub { font-size: 10.5px; }
+		/* The chart and its highlights move to the next page together if a long header pushes them off page 1. */
+		.trend { break-inside: avoid; }
+		.table-card { break-inside: auto; }
+		.report-table thead { display: table-header-group; }
 		@page { size: A4; margin: 12mm; }
 	}
 </style>
@@ -868,9 +908,13 @@ export class ReportsService {
 <body>
 <div class="report">
 
-	<div class="print-bar">
-		<button type="button" class="print-btn" onclick="window.print()">Print / Save as PDF</button>
-	</div>
+	${
+    mode === 'screen'
+      ? `<div class="print-bar">
+		<button type="button" class="print-btn" onclick="window.print()">Print</button>
+	</div>`
+      : ''
+  }
 
 	<div class="brand-row">
 		<span class="logo">${LOGO_SVG}<span class="logo-word">Fratoo</span></span>
@@ -907,10 +951,7 @@ export class ReportsService {
 
 	${warnings}
 
-	${logCards}
-
-	${batch.notes && isLongNote(batch.notes) ? `<section class="card section-card"><h2>Notes</h2><div class="rich">${renderNotesHtml(batch.notes)}</div></section>` : ''}
-
+	<div class="trend">
 	<section class="card section">
 		<h2>Fermentation trend</h2>
 		<div class="legend">
@@ -922,11 +963,6 @@ export class ReportsService {
 			${chartData.markers.some((m) => m.kind === 'event') ? '<span><i class="vline event"></i>Event</span>' : ''}
 		</div>
 		<div class="chart-box"><canvas id="report-chart"></canvas></div>
-	</section>
-
-	<section class="card section">
-		<h2>Gravity readings</h2>
-		${gravitySection}
 	</section>
 
 	<section class="section">
@@ -957,8 +993,21 @@ export class ReportsService {
 			</div>
 		</div>
 	</section>
+	</div>
 
-	<section class="card section">
+	<!-- Page 2 on paper: the detail. -->
+	<div class="details">
+
+	${logCards}
+
+	${batch.notes && isLongNote(batch.notes) ? `<section class="card section-card"><h2>Notes</h2><div class="rich">${renderNotesHtml(batch.notes)}</div></section>` : ''}
+
+	<section class="card section table-card">
+		<h2>Gravity readings</h2>
+		${gravitySection}
+	</section>
+
+	<section class="card section table-card">
 		<h2>Daily 9:00 PM snapshots <span class="hint">(UTC)</span></h2>
 		${
       snapshotRows
@@ -981,18 +1030,14 @@ export class ReportsService {
 		Temperature calibrated via PLAATO's PCB self-heating correction (0.9133 × raw − 1.145).
 	</p>
 
+	</div>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>${assets.chartJs}</script>
 <script>
 (function () {
 	'use strict';
-	if (typeof Chart === 'undefined') {
-		var box = document.querySelector('.chart-box');
-		if (box) box.innerHTML = '<p class="empty" style="padding:20px">Chart could not load (no internet connection). Open this report online to see the trend chart.</p>';
-		return;
-	}
 
 	var data = ${chartJson};
 	var t = function (iso) { return new Date(iso).getTime(); };
@@ -1062,6 +1107,8 @@ export class ReportsService {
 			responsive: true,
 			maintainAspectRatio: false,
 			animation: false,
+			// Sharp on paper: the canvas is printed as an image.
+			devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
 			interaction: { mode: 'index', intersect: false },
 			plugins: {
 				legend: { display: false },
@@ -1089,6 +1136,8 @@ export class ReportsService {
 	window.addEventListener('beforeprint', function () { chart.resize(); });
 	window.addEventListener('afterprint', function () { chart.resize(); });
 })();
+// PdfService tells Gotenberg to wait for this, so the chart is on the page before it prints.
+window.reportReady = true;
 </script>
 </body>
 </html>`;

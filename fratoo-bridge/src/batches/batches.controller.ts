@@ -16,7 +16,8 @@ import {
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ReadingsService } from '../readings/readings.service';
-import { ReportsService } from '../reports/reports.service';
+import { PdfService } from '../reports/pdf.service';
+import { ReportInput, ReportsService } from '../reports/reports.service';
 import { FermentationService } from '../fermentation/fermentation.service';
 import { VERSION_INFO } from '../app.service';
 import { DevicesService } from '../devices/devices.service';
@@ -31,6 +32,7 @@ export class BatchesController {
   constructor(
     private readonly batches: BatchesService,
     private readonly reports: ReportsService,
+    private readonly pdf: PdfService,
     private readonly fermentation: FermentationService,
     private readonly devices: DevicesService,
   ) {}
@@ -149,19 +151,46 @@ export class BatchesController {
     };
   }
 
+  /** The print view: the report as a page (it has its own Print button). */
   @Get(':id/report')
-  async downloadReport(
+  async report(
     @Param('id', ParseIntPipe) id: number,
     @Res() res: Response,
   ) {
+    const input = await this.reportInput(id);
+    const html = this.reports.generateReportHtml(input, 'screen');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${this.reports.reportFilename(input.batch)}"`,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(html);
+  }
+
+  /** The same page as an A4 PDF, rendered by Gotenberg. 503 when it isn't reachable. */
+  @Get(':id/report/pdf')
+  async reportPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const input = await this.reportInput(id);
+    const html = this.reports.generateReportHtml(input, 'pdf');
+    const pdf = await this.pdf.htmlToPdf(
+      html,
+      `${input.batch.batchCode} · Fermentation report · Fratoo ${VERSION_INFO.version}`,
+    );
+    this.pdf.send(res, pdf, this.reports.reportFilename(input.batch, 'pdf'));
+  }
+
+  /** Same sources as the dashboard's batch page (stats, fermentation, gravity-readings, abv-series). */
+  private async reportInput(id: number): Promise<ReportInput> {
     const batch = await this.batches.findOneOrThrow(id);
     if (!batch) throw new NotFoundException();
     const estimate = await this.fermentation.estimate(batch, await this.batches.getReadings(id));
     // Rates in bubbles of the current airlock size, like the dashboard; counters (and so ABV) are unchanged.
     const readings = await this.fermentation.withComparableRates(batch, await this.batches.getReadings(id), estimate);
-
-    // Same sources as the dashboard's batch page (stats, fermentation, gravity-readings, abv-series).
-    const html = this.reports.generateReportHtml({
+    return {
       batch,
       readings,
       stats: ReadingsService.computeStats(readings),
@@ -172,11 +201,6 @@ export class BatchesController {
       abvAt: await this.fermentation.abvTimeline(batch, readings),
       version: `v${VERSION_INFO.version} (${VERSION_INFO.commit})`,
       deviceName: await this.devices.nameOf(batch.deviceId),
-    });
-    const filename = this.reports.reportFilename(batch);
-
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(html);
+    };
   }
 }

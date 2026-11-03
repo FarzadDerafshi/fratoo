@@ -5,6 +5,35 @@ Lightweight decision log — why things are built the way they are, not what the
 
 ---
 
+## 2026-11-03 — PDF reports with Fratoo's own Gotenberg container
+
+**Problem:** the report was an HTML download; a PDF meant opening it and using the
+browser's Print → Save as PDF, which on a phone is awkward and depends on the browser. The
+chart and fonts came from CDNs, so offline the chart was missing.
+
+**Decision:** render the PDF on the server with Gotenberg (headless Chromium), the same
+pattern MyRecipes uses: image `gotenberg/gotenberg:8.38.1-chromium` (pinned), internal
+only, the api POSTs the report page to `/forms/chromium/convert/html` (A4, 0.6 in margins,
+backgrounds on, 30 s timeout) and answers 503 with a plain message if it can't. The page is
+the same HTML as the print view, so the PDF looks like the page. Chart.js, its date
+adapter and the fonts are inlined from npm packages (`report-assets.ts`), so Gotenberg
+never fetches anything and a saved print view works offline. Gotenberg waits for
+`window.reportReady`, set once the chart is drawn; Chromium's footer template prints the
+batch code and page X of Y.
+
+**Own container, not MyRecipes' `myrecipes_pdf`:** sharing would save ~150–300 MB RAM but
+couple the apps: a MyRecipes release or outage would stop Fratoo PDFs, and MyRecipes'
+compose file would have to expose its network. Fratoo releases stay independent.
+
+**Layout:** page 1 is the summary (header, ABV, activity, chart, highlights; print CSS is
+tighter so they fit); the detail (brew log, notes, gravity readings, snapshots, footnote)
+starts on page 2. The chart and highlights move together if a long header pushes them off.
+
+**Release script:** builds the api and web images one at a time before `up -d`; parallel
+builds once crashed the server's Docker VM, which is short on RAM.
+
+---
+
 ## 2026-11-02 — `ProdRelease.bat` starts its new version itself (release standard v2)
 
 **Problem:** when an update changed `ProdRelease.bat`, the script stopped ("run it again")

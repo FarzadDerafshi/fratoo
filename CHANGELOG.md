@@ -36,6 +36,20 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+### Added
+
+- **Download PDF** on the batch page: the report as an A4 PDF, made on the server by its
+  own Gotenberg container (`pdf`, internal only). Summary on page 1 (header, ABV, activity,
+  chart, highlights), the detail from page 2, batch code and page number on every page.
+  If the PDF service is down, the button says so.
+- **⋯ → Report print view** opens the same report in a new tab instead of downloading an
+  HTML file.
+
+### Changed
+
+- The report has Chart.js and its fonts built in, so it needs nothing from the internet
+  (the PDF renderer never fetches anything, and a saved print view works offline).
+
 ### Deployment
 
 #### Changed
@@ -45,6 +59,9 @@ are kept as the project's record.
   same log; run by hand it pauses once at the end, unattended never. A second script change
   in the middle of that stops with exit code 2 (run it again). Every failure now ends with
   `[ERROR]` and exit code 1. The temporary copy gets a new name each run.
+- **`ProdRelease.bat` builds the api and web images one at a time**, then starts the stack;
+  parallel builds once crashed the server's Docker VM. The new `pdf` service (Gotenberg
+  8.38.1, ~150–300 MB RAM) is pulled on the first release.
 - `.gitattributes`: `.bat`, `.cmd`, `.ps1` and `.vbs` files are always checked out with
   CRLF line endings, whatever the machine's git settings.
 

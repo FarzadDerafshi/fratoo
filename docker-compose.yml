@@ -1,6 +1,6 @@
 # Standalone Fratoo stack: Postgres + the NestJS backend (fratoo-bridge,
 # which also runs the TCP Blynk listener) + the React frontend (fratoo-web,
-# served by nginx). Replaces the WordPress plugin — see
+# served by nginx) + Gotenberg for the PDF reports. Replaces the WordPress plugin — see
 # ProjectDocs/ARCHITECTURE.md and ProjectDocs/DECISIONS.md.
 #
 # Copy .env.example to .env in this folder first. Run with:
@@ -40,6 +40,7 @@ services:
     environment:
       DB_HOST: postgres # service name on this compose network — overrides whatever .env says for non-Docker use
       DB_PORT: 5432
+      GOTENBERG_URL: http://pdf:3000
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,6 +56,15 @@ services:
       - '8086:80'
     depends_on:
       - api
+
+  # HTML -> PDF for the batch reports (headless Chromium). Internal only: no
+  # ports published, reached by the api as http://pdf:3000. Fratoo's own
+  # instance, so its releases don't depend on another app's (see DECISIONS.md).
+  pdf:
+    image: gotenberg/gotenberg:8.38.1-chromium
+    container_name: fratoo-pdf
+    restart: unless-stopped
+    command: ['gotenberg', '--api-timeout=60s', '--chromium-auto-start']
 
 volumes:
   fratoo_pgdata:

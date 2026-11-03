@@ -297,10 +297,13 @@ fermentation the wort itself typically runs 2–4 °C warmer than what's shown.
 
 The chips switch each line on and off; **24h / 3d / 7d / All** pick the time range.
 
-### Download Batch Report
+### Batch report (PDF)
 
-Click **Download report** to generate a self-contained, print-ready HTML file covering the
-whole batch, with the same look and the same numbers as the batch page.
+Click **Download PDF** to get an A4 PDF of the whole batch, with the same look and the
+same numbers as the batch page. Page 1 is the summary (header, ABV, activity and
+temperature, trend chart, highlights); the detail follows from page 2. Every page has the
+batch code and page number at the bottom. **⋯ → Report print view** opens the same report as
+a page in a new tab, to read on screen or print from the browser.
 
 - **Header** — the Fratoo logo, batch code and status, start/end, volume, added sugar, OG
   (as entered and as SG), target ABV, device, and the batch notes.
@@ -329,10 +332,9 @@ whole batch, with the same look and the same numbers as the batch page.
     `started_at` if none is set, to the
     first reading that clears a small activity floor and stays active, filtering out
     single-spike noise).
-The downloaded file opens as a normal HTML page in any browser. To get a PDF: open it, then
-**Ctrl+P → Save as PDF** (the report has print-specific styling so it lays out cleanly on
-A4). All times in the report are UTC. The chart and fonts load from the internet; offline
-the numbers and tables still show.
+The PDF is made on the server (the `pdf` container); if it isn't running, the button says
+so and the print view still works. All times in the report are UTC. The report needs
+nothing from the internet: the chart and fonts are built in.
 
 ## Troubleshooting
 

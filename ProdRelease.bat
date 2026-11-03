@@ -225,20 +225,34 @@ for %%F in ("%ROOT%fratoo-bridge\db\init\*.sql") do (
 )
 :migrations_done
 
-:: Step 5: Rebuild and restart the full stack (postgres + api + web) from
-:: the repo-root docker-compose.yml.
+:: Step 5: Rebuild and restart the full stack (postgres + api + web + pdf)
+:: from the repo-root docker-compose.yml.
+::
+:: The two app images are built one at a time, then started: building them
+:: in parallel (plain "up -d --build") once crashed the server's Docker VM,
+:: which is short on RAM. "up -d" then pulls the Gotenberg image if missing.
 ::
 :: Not redirected to the log file -- this step can take a few minutes on
-:: the first run (pulling postgres/nginx base images, building two app
+:: the first run (pulling postgres/nginx/gotenberg images, building two app
 :: images) and hiding its output would make the window look frozen with
 :: nothing on screen to prove otherwise.
 :: GIT_COMMIT is read by docker-compose.yml as a build arg for both images,
 :: so GET /api/version and the dashboard footer show exactly which commit
 :: is running (see CHANGELOG.md "Versioning").
 for /f %%C in ('git rev-parse --short HEAD') do set "GIT_COMMIT=%%C"
-echo [5/6] Rebuilding and restarting the stack ^(postgres + api + web^) at commit %GIT_COMMIT%...
+echo [5/6] Rebuilding and restarting the stack ^(postgres + api + web + pdf^) at commit %GIT_COMMIT%...
 echo Building commit %GIT_COMMIT% >> "%LOGFILE%"
-docker compose up -d --build
+docker compose build api
+if errorlevel 1 (
+    echo [ERROR] Building the api image failed!
+    goto :fail
+)
+docker compose build web
+if errorlevel 1 (
+    echo [ERROR] Building the web image failed!
+    goto :fail
+)
+docker compose up -d
 if errorlevel 1 (
     echo [ERROR] Docker compose failed!
     goto :fail

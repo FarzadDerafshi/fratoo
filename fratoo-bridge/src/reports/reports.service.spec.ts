@@ -312,4 +312,32 @@ describe('ReportsService', () => {
     });
     expect(html).toContain('Airlock &lt;1&gt; (01234567…cdef)');
   });
+
+  it('is self-contained: fonts and Chart.js inlined, nothing fetched', () => {
+    const html = service.generateReportHtml(makeInput());
+    expect(html).not.toMatch(/<(script|link|img)[^>]+(src|href)="https?:/);
+    expect(html).toContain("font-family: 'IBM Plex Sans'");
+    expect(html).toContain('data:font/woff2;base64,');
+    expect(html).toContain('window.reportReady = true');
+    expect(html).toContain('Chart');
+  });
+
+  it('puts the summary first and the detail from page 2, with a Print button only on screen', () => {
+    const screen = service.generateReportHtml(makeInput());
+    const pdf = service.generateReportHtml(makeInput(), 'pdf');
+    expect(screen).toContain('class="print-btn"');
+    expect(pdf).not.toContain('class="print-btn"');
+    const chart = pdf.indexOf('Fermentation trend');
+    const details = pdf.indexOf('<div class="details">');
+    expect(chart).toBeGreaterThan(0);
+    expect(details).toBeGreaterThan(chart);
+    expect(pdf.indexOf('Gravity readings</h2>')).toBeGreaterThan(details);
+    expect(pdf.indexOf('Brew log</h2>')).toBeGreaterThan(details);
+    if (process.env.REPORT_SAMPLE)
+      writeFileSync(process.env.REPORT_SAMPLE.replace(/\.html$/, '-pdf.html'), pdf);
+  });
+
+  it('names the PDF like the HTML', () => {
+    expect(service.reportFilename(makeBatch(), 'pdf')).toMatch(/^fratoo-report-.+-\d{4}-\d\d-\d\d\.pdf$/);
+  });
 });

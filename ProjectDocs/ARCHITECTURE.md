@@ -34,7 +34,7 @@ fratoo/
 │   │   ├── database/       TypeORM entities + DataSource provider
 │   │   ├── readings/       V100 delta engine, fermentation stats
 │   │   ├── batches/        Batch CRUD, cascading delete, window resolution
-│   │   ├── reports/        Download Batch Report HTML generation
+│   │   ├── reports/        Batch report page + PDF (via Gotenberg)
 │   │   ├── auth/           Single-admin JWT login
 │   │   └── common/         Shared fermentation math (see DECISIONS.md)
 │   ├── db/init/            SQL schema, auto-applied on a fresh Postgres volume
@@ -112,12 +112,16 @@ fratoo/
   `bubbleVolumeMl`/`bubbleVolumeSource`, …) from this model, and the report's daily
   snapshots use it too. Why and sources: [DECISIONS.md](DECISIONS.md) "Calibrated
   bubble-volume ABV model".
-- **ReportsModule** — generates the self-contained "Download Batch Report" HTML document
-  (daily snapshots, highlights, chart) in the dashboard design (light tokens copied from
+- **ReportsModule** — generates the self-contained batch report page (daily snapshots,
+  highlights, chart) in the dashboard design (light tokens copied from
   `fratoo-web/src/index.css`, inline logo) and with the dashboard's data:
   `BatchesController` passes it the same `computeStats`, `FermentationService.estimate()`,
   gravity readings and `abvSeries()` the batch page loads, so the two never disagree.
-  Tests: `reports.service.spec.ts`.
+  Chart.js and the fonts are inlined (`report-assets.ts`). `GET /api/batches/:id/report`
+  serves it as the print view; `GET /api/batches/:id/report/pdf` sends the same page to
+  the `pdf` container (Gotenberg, `GOTENBERG_URL`, default `http://pdf:3000`) through
+  `PdfService` and returns an A4 PDF, or 503 if Gotenberg isn't reachable. Tests:
+  `reports.service.spec.ts`, `pdf.service.spec.ts`.
 - **AuthModule** — single-admin JWT login (`ADMIN_USERNAME` + `ADMIN_PASSWORD_HASH`, bcrypt).
   See [DEPLOYMENT.md](DEPLOYMENT.md) for creating the account.
 - **Database** — Postgres via `typeorm`, driven directly (no `@nestjs/typeorm`) — see

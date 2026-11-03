@@ -82,8 +82,10 @@ run unattended, e.g. by a scheduler or a chat-ops bot). It:
 2. updates the code to exactly `origin/main` (`git fetch` + forced checkout, so local edits
    to tracked files are overwritten and gitignored files are left alone),
 3. applies database migrations (below),
-4. rebuilds and restarts the stack (`docker compose up -d --build`), passing the git commit
-   into both images,
+4. builds the api and web images one at a time (`docker compose build api`, then `web`;
+   parallel builds once crashed the server's Docker VM), passing the git commit into both,
+   then starts the stack with `docker compose up -d` (which pulls the Gotenberg image the
+   first time),
 5. checks port 1234 and asks `http://localhost:8086/api/version` which build is running,
    e.g. `Running: v2.6.1 (ab12cd3)`; the dashboard footer shows the same.
 
@@ -159,7 +161,11 @@ and on iPhone the installed home-screen app.
 ## Day-to-day operations
 
 - **Logs:** `docker compose logs -f` for everything, or `docker compose logs -f api` /
-  `web` / `postgres`.
+  `web` / `postgres` / `pdf`.
+- **PDF reports:** the `pdf` service (container `fratoo-pdf`, Gotenberg) renders them; it
+  publishes no ports and uses roughly 150–300 MB RAM. If **Download PDF** says "The PDF
+  service is not available right now", check `docker compose ps pdf` and
+  `docker compose logs pdf`; the print view (⋯ menu) works without it.
 - **After a code or `.env` change:** `docker compose up -d --build` at the repo root (or
   just `ProdRelease.bat`). The frontend is baked into the nginx image, so a plain
   `docker compose restart web` does **not** pick up source changes.

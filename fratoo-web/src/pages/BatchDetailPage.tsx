@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, downloadReport } from '../api/client';
+import { api, downloadReportPdf, openReportPrintView } from '../api/client';
 import { BatchEventsPanel } from '../components/BatchEventsPanel';
 import { FermentationChart, type ChartMarker } from '../components/FermentationChart';
 import { GravityReadingsPanel } from '../components/GravityReadingsPanel';
@@ -455,13 +455,25 @@ export function BatchDetailPage() {
     navigate('/batches');
   }
 
-  async function handleDownloadReport() {
+  async function handleDownloadPdf() {
     if (!batch) return;
     setBusy(true);
     try {
-      await downloadReport(batch.id, `fratoo-report-${batch.batchCode}.html`);
+      await downloadReportPdf(batch.id, `fratoo-report-${batch.batchCode}.pdf`);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to make the PDF.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handlePrintView() {
+    if (!batch) return;
+    setMenuOpen(false);
+    try {
+      await openReportPrintView(batch.id);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to open the report.');
     }
   }
 
@@ -564,8 +576,8 @@ export function BatchDetailPage() {
             </span>
           </div>
           <div className="detail-actions">
-            <button type="button" className="secondary" onClick={() => void handleDownloadReport()} disabled={busy}>
-              Download report
+            <button type="button" className="secondary" onClick={() => void handleDownloadPdf()} disabled={busy}>
+              Download PDF
             </button>
             {active && (
               <button type="button" onClick={() => void handleComplete()} disabled={busy}>
@@ -594,6 +606,9 @@ export function BatchDetailPage() {
                     }}
                   >
                     Edit batch &amp; ABV inputs
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => void handlePrintView()}>
+                    Report print view
                   </button>
                   {!active && (
                     <button type="button" role="menuitem" onClick={() => void handleReopen()}>
