@@ -36,10 +36,6 @@ are kept as the project's record.
 
 ## [Unreleased]
 
----
-
-## [Unreleased]
-
 ### Fixed
 
 - **PDF report layout:** the footer now lines up with the content (page margins 15 mm, the
