@@ -36,6 +36,10 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+---
+
+## [2.9.0] — 2026-11-03 — **PDF Reports**
+
 ### Added
 
 - **Download PDF** on the batch page: the report as an A4 PDF, made on the server by its
