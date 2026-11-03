@@ -36,6 +36,10 @@ are kept as the project's record.
 
 ## [Unreleased]
 
+---
+
+## [2.9.1] — 2026-11-03 — **PDF Layout Fixes**
+
 ### Fixed
 
 - **PDF report layout:** the footer now lines up with the content (page margins 15 mm, the
